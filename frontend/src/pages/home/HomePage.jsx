@@ -1,5 +1,4 @@
 import NavBar from "../components/NavBar";
-import "./style.css";
 import toast from "react-hot-toast";
 import { 
   CalendarDays, 
@@ -14,11 +13,9 @@ import {
   Mail, 
   FileText, 
   ArrowRight,
-  ShieldAlert,
   Languages,
   Sparkles,
   Lock,
-  FileSpreadsheet,
   Shuffle,
   X,
   Check,
@@ -73,11 +70,11 @@ function FloatingInstruments() {
   }, []);
 
   return (
-    <div ref={containerRef} className="floating-instruments">
+    <div ref={containerRef} className="fixed inset-0 w-full h-full pointer-events-none z-0 overflow-hidden">
       {instruments.map((instrument, index) => {
         const Icon = instrument.icon;
         return (
-          <div key={index} className="floating-instrument">
+          <div key={index} className="floating-instrument absolute text-[#57f1db] opacity-10 pointer-events-none transition-all duration-500">
             <Icon size={instrument.size} />
           </div>
         );
@@ -190,22 +187,22 @@ function InfoModal({ isOpen, type, onClose, navigate }) {
   };
 
   return (
-    <div ref={overlayRef} className="modal-overlay" onClick={handleClose}>
-      <div ref={modalRef} className="modal-content glassmorphism-modal border border-[#57f1db]/20 shadow-2xl" onClick={e => e.stopPropagation()}>
-        <button className="close-button" onClick={handleClose} title="Close">
+    <div ref={overlayRef} className="fixed inset-0 w-full h-full bg-[#050c16]/75 backdrop-blur-md grid place-items-center overflow-y-auto z-[9999] p-6" onClick={handleClose}>
+      <div ref={modalRef} className="relative w-full max-w-[840px] bg-[#0c1929]/95 border border-[#57f1db]/20 backdrop-blur-2xl p-8 rounded-[28px] text-white shadow-[0_30px_60px_rgba(0,0,0,0.6),0_0_50px_rgba(87,241,219,0.1)] m-auto" onClick={e => e.stopPropagation()}>
+        <button className="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/5 border border-white/10 text-white/60 flex items-center justify-center cursor-pointer transition-all duration-300 hover:bg-white/15 hover:text-white hover:rotate-90" onClick={handleClose} title="Close">
           <X size={18} />
         </button>
         
         {type === "about" && (
-          <div className="modal-inner-content text-left items-start w-full">
+          <div className="flex flex-col items-start text-left w-full">
             <div className="flex items-center gap-3.5 mb-4">
-              <div className="modal-header-icon text-[#57f1db] bg-[#57f1db]/5 border border-[#57f1db]/10 mb-0">
+              <div className="p-3 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center text-[#57f1db] bg-[#57f1db]/5 border-[#57f1db]/10">
                 <BookOpen size={28} />
               </div>
-              <h2 className="mb-0 text-2xl font-extrabold text-white">About the Project</h2>
+              <h2 className="text-2xl font-extrabold text-white">About the Project</h2>
             </div>
             
-            <div className="modal-grid-layout mt-4 border-t border-white/10 pt-5">
+            <div className="grid grid-cols-1 md:grid-cols-[1.1fr_0.9fr] gap-9 w-full text-left mt-4 border-t border-white/10 pt-5">
               <div>
                 <p className="text-sm text-gray-300 leading-relaxed">
                   We believe a school's schedule is its operational heartbeat, but crafting one is a monumental puzzle. Timetable Generator was born out of a desire to rescue administrators and teachers from the annual chaos of manual scheduling.
@@ -236,12 +233,12 @@ function InfoModal({ isOpen, type, onClose, navigate }) {
         )}
         
         {type === "terms" && (
-          <div className="modal-inner-content text-left items-start w-full">
+          <div className="flex flex-col items-start text-left w-full">
             <div className="flex items-center gap-3.5 mb-4">
-              <div className="modal-header-icon text-[#4fdbc8] bg-[#4fdbc8]/5 border border-[#4fdbc8]/10 mb-0">
+              <div className="p-3 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center text-[#4fdbc8] bg-[#4fdbc8]/5 border-[#4fdbc8]/10">
                 <FileText size={28} />
               </div>
-              <h2 className="mb-0 text-2xl font-extrabold text-white">Terms & Conditions</h2>
+              <h2 className="text-2xl font-extrabold text-white">Terms & Conditions</h2>
             </div>
             
             <div className="w-full max-h-[380px] overflow-y-auto pr-2 mt-4 space-y-5 text-left border-t border-white/10 pt-4 scrollbar-thin">
@@ -299,12 +296,12 @@ function InfoModal({ isOpen, type, onClose, navigate }) {
         )}
         
         {type === "contact" && (
-          <div className="modal-inner-content text-left items-start w-full">
+          <div className="flex flex-col items-start text-left w-full">
             <div className="flex items-center gap-3.5 mb-2">
-              <div className="modal-header-icon text-purple-400 bg-purple-500/5 border border-purple-500/10 mb-0">
+              <div className="p-3 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center text-purple-400 bg-purple-500/5 border-purple-500/10">
                 <Mail size={28} />
               </div>
-              <h2 className="mb-0 text-2xl font-extrabold text-white">Contact Support</h2>
+              <h2 className="text-2xl font-extrabold text-white">Contact Support</h2>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full text-left mt-4 border-t border-white/10 pt-5">
@@ -319,9 +316,9 @@ function InfoModal({ isOpen, type, onClose, navigate }) {
                     <h4 className="text-sm font-extrabold text-white mt-0.5">Abhinandh A</h4>
                     <p className="text-[10px] text-gray-400 mt-1 leading-normal">Algorithmic Engine & Optimization Lead</p>
                   </div>
-                  <a href="mailto:a6hinandh@gmail.com" className="mt-3.5 inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-semibold transition-colors">
+                  <a href="mailto:abhinandh2670@gmail.com" className="mt-3.5 inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-semibold transition-colors">
                     <Mail size={12} />
-                    <span>a6hinandh@gmail.com</span>
+                    <span>abhinandh2670@gmail.com</span>
                   </a>
                 </div>
                 
@@ -373,7 +370,7 @@ function InfoModal({ isOpen, type, onClose, navigate }) {
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="bg-gradient-to-r from-[#57f1db] to-[#4fdbc8] text-[#051424] font-bold py-2.5 rounded-lg text-xs mt-1 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 shadow-[0_4px_10px_rgba(87,241,219,0.15)]"
+                  className="bg-gradient-to-r from-[#57f1db] to-[#4fdbc8] text-[#051424] font-bold py-2.5 rounded-lg text-xs mt-1 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 shadow-[0_4px_10px_rgba(87,241,219,0.15)] cursor-pointer"
                 >
                   <Send size={12} />
                   <span>{isSubmitting ? "Sending..." : "Send Message"}</span>
@@ -384,12 +381,12 @@ function InfoModal({ isOpen, type, onClose, navigate }) {
         )}
         
         {type === "language" && (
-          <div className="modal-inner-content text-left items-start w-full">
+          <div className="flex flex-col items-start text-left w-full">
             <div className="flex items-center gap-3.5 mb-4">
-              <div className="modal-header-icon text-cyan-400 bg-cyan-500/5 border border-cyan-500/10 mb-0">
+              <div className="p-3 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center text-cyan-400 bg-cyan-500/5 border-cyan-500/10">
                 <Languages size={28} />
               </div>
-              <h2 className="mb-0 text-2xl font-extrabold text-white">Language / Region</h2>
+              <h2 className="text-2xl font-extrabold text-white">Language / Region</h2>
             </div>
             
             <div className="flex flex-col gap-4 mt-4 text-left border-t border-white/10 pt-5 w-full">
@@ -410,7 +407,7 @@ function InfoModal({ isOpen, type, onClose, navigate }) {
                   </div>
                   <span className="text-[10px] text-[#57f1db] font-bold uppercase tracking-wider bg-[#57f1db]/10 px-2 py-0.5 rounded border border-[#57f1db]/20">Active</span>
                 </div>
-
+ 
                 <div className="flex items-center justify-between bg-white/[0.02] p-4 rounded-xl border border-white/5 w-full opacity-60">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-white/5 rounded-lg text-gray-400">
@@ -423,7 +420,7 @@ function InfoModal({ isOpen, type, onClose, navigate }) {
                   </div>
                   <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider bg-white/5 px-2 py-0.5 rounded">Coming Soon</span>
                 </div>
-
+ 
                 <div className="flex items-center justify-between bg-white/[0.02] p-4 rounded-xl border border-white/5 w-full opacity-60">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-white/5 rounded-lg text-gray-400">
@@ -442,19 +439,19 @@ function InfoModal({ isOpen, type, onClose, navigate }) {
         )}
         
         {type === "credits" && (
-          <div className="modal-inner-content text-left items-start w-full">
+          <div className="flex flex-col items-start text-left w-full">
             <div className="flex items-center gap-3.5 mb-4">
-              <div className="modal-header-icon text-amber-400 bg-amber-500/5 border border-amber-500/10 mb-0">
+              <div className="p-3 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center text-amber-400 bg-amber-500/5 border-amber-500/10">
                 <Users size={28} />
               </div>
-              <h2 className="mb-0 text-2xl font-extrabold text-white">Credits & Assistance</h2>
+              <h2 className="text-2xl font-extrabold text-white">Credits & Assistance</h2>
             </div>
             
             <div className="flex flex-col gap-4 mt-4 text-left border-t border-white/10 pt-5 w-full">
               <p className="text-xs text-gray-300 leading-relaxed">
                 This project is designed and engineered as a collaborative development project. We are passionate about making complex administrative scheduling tasks simple and error-free.
               </p>
-
+ 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold text-[#57f1db] uppercase tracking-widest flex items-center gap-1.5">
@@ -474,41 +471,29 @@ function InfoModal({ isOpen, type, onClose, navigate }) {
                     </div>
                   </div>
                 </div>
-
+ 
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold text-[#4fdbc8] uppercase tracking-widest flex items-center gap-1.5">
                     <Settings size={12} />
-                    <span>Technology Stack</span>
+                    <span>Support Systems</span>
                   </h4>
-                  <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-2.5 text-xs text-gray-300">
-                    <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                      <span className="font-semibold text-white">Solver Engine</span>
-                      <span className="text-[10px] text-gray-400 font-mono">OR-Tools CP-SAT</span>
+                  <div className="space-y-3">
+                    <div className="bg-white/5 p-4 rounded-xl border border-white/10 hover:border-[#4fdbc8]/30 transition-all">
+                      <strong className="text-[#4fdbc8] block text-[9px] uppercase tracking-wider font-extrabold">Solver Technology</strong>
+                      <h4 className="text-sm font-extrabold text-white mt-0.5">Google OR-Tools</h4>
+                      <p className="text-[10px] text-gray-400 mt-0.5">CP-SAT Constraint Solver</p>
                     </div>
-                    <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                      <span className="font-semibold text-white">Frontend Core</span>
-                      <span className="text-[10px] text-gray-400 font-mono">React v19 & Vite</span>
-                    </div>
-                    <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                      <span className="font-semibold text-white">Styling System</span>
-                      <span className="text-[10px] text-gray-400 font-mono">Tailwind CSS</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold text-white">Animations</span>
-                      <span className="text-[10px] text-gray-400 font-mono">GSAP Engine</span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end pt-1">
-                    <button 
-                      className="w-full bg-gradient-to-r from-[#57f1db] to-[#4fdbc8] text-[#051424] font-bold py-2.5 rounded-lg transition-all hover:scale-[1.02] active:scale-[0.98] duration-200 text-xs shadow-[0_4px_10px_rgba(87,241,219,0.2)]"
+                    <div 
+                      className="bg-white/5 p-4 rounded-xl border border-white/10 hover:border-[#57f1db]/30 transition-all cursor-pointer flex flex-col justify-center min-h-[72px]"
                       onClick={() => {
                         handleClose();
                         navigate("/guide");
                       }}
                     >
-                      Visit Help Guide
-                    </button>
+                      <button className="w-full bg-gradient-to-r from-[#57f1db] to-[#4fdbc8] text-[#051424] font-bold py-2 rounded-lg transition-all hover:scale-[1.02] active:scale-[0.98] duration-200 text-xs shadow-[0_4px_10px_rgba(87,241,219,0.2)]">
+                        Visit Help Guide
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -595,54 +580,52 @@ function HomePage() {
   }, []);
 
   return (
-    <div className="dark-gradient-bg min-h-screen relative overflow-hidden">
-      <div className="bg-glow-blob bg-glow-blob-1"></div>
-      <div className="bg-glow-blob bg-glow-blob-2"></div>
+    <div className="bg-[radial-gradient(circle_at_10%_20%,#091526_0%,#051424_90%)] min-h-screen relative overflow-hidden text-[#d4e4fa] font-['Plus_Jakarta_Sans',sans-serif]">
+      <div className="absolute rounded-full blur-[120px] pointer-events-none z-0 bg-glow-blob-1 top-[10%] left-[-5%] w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(87,241,219,0.12)_0%,transparent_70%)]"></div>
+      <div className="absolute rounded-full blur-[120px] pointer-events-none z-0 bg-glow-blob-2 bottom-[15%] right-[-5%] w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(79,219,200,0.08)_0%,transparent_70%)]"></div>
 
       <FloatingInstruments />
 
       <div className="container mx-auto px-6 relative z-10">
-        <div className="row pt-5 items-center">
-          <div className="col">
-            <div className="hero-text-container text-left">
-              <span className="inline-block px-4 py-1.5 rounded-full bg-[#57f1db]/10 text-[#57f1db] font-semibold text-xs mb-6 border border-[#57f1db]/20 uppercase tracking-widest">
-                AI-Powered Scheduling Engine
-              </span>
-              <h1 className="hero-title">
-                <span className="hero-title-segment block">Generate School</span>
-                <span className="hero-title-segment block gradient-text">Timetables</span>
-                <span className="hero-title-segment block">Effortlessly</span>
-              </h1>
-              
-              <h3 className="hero-subtitle">
-                Create mathematically optimized class schedules with our intelligent solver algorithm.
-                Save hours of manual alignment work and eliminate scheduling conflicts with
-                our professional-grade generator. Built as a free, open tool to simplify your administrative workflow.
-              </h3>
+        <div className="flex flex-col lg:flex-row pt-[120px] items-center gap-12 lg:gap-20 min-h-[90vh]">
+          <div className="flex-1 w-full text-left flex flex-col items-start justify-center">
+            <span className="inline-block px-4 py-1.5 rounded-full bg-[#57f1db]/10 text-[#57f1db] font-semibold text-xs mb-6 border border-[#57f1db]/20 uppercase tracking-widest">
+              AI-Powered Scheduling Engine
+            </span>
+            <h1 className="text-[clamp(2.5rem,6vw,4.5rem)] font-black leading-[1.1] mb-6 tracking-tight text-white">
+              <span className="hero-title-segment block">Generate School</span>
+              <span className="hero-title-segment block bg-gradient-to-r from-[#57f1db] to-[#4fdbc8] bg-clip-text text-transparent">Timetables</span>
+              <span className="hero-title-segment block">Effortlessly</span>
+            </h1>
+            
+            <h3 className="text-[1.1rem] md:text-[1.25rem] text-slate-300 leading-relaxed mb-10 max-w-[600px] font-normal">
+              Create mathematically optimized class schedules with our intelligent solver algorithm.
+              Save hours of manual alignment work and eliminate scheduling conflicts with
+              our professional-grade generator. Built as a free, open tool to simplify your administrative workflow.
+            </h3>
 
-              <div className="hero-actions">
-                <button
-                  className="btn-classic-primary"
-                  onClick={() => navigate(isSignedIn ? "/dashboard" : "/login")}
-                >
-                  <span>Get Started Now</span>
-                  <ArrowRight size={18} />
-                </button>
-                
-                <button
-                  className="btn-classic-secondary"
-                  onClick={() => navigate("/guide")}
-                >
-                  <span>Learn How It Works</span>
-                </button>
-              </div>
+            <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+              <button
+                className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-[#57f1db] to-[#4fdbc8] text-[#051424] font-bold text-[1.1rem] rounded-[16px] transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-[0_15px_40px_rgba(87,241,219,0.25)] hover:shadow-[0_20px_50px_rgba(87,241,219,0.35)] cursor-pointer"
+                onClick={() => navigate(isSignedIn ? "/dashboard" : "/login")}
+              >
+                <span>Get Started Now</span>
+                <ArrowRight size={18} />
+              </button>
+              
+              <button
+                className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/5 border border-white/10 text-white font-bold text-[1.1rem] rounded-[16px] transition-all duration-300 hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                onClick={() => navigate("/guide")}
+              >
+                <span>Learn How It Works</span>
+              </button>
             </div>
           </div>
           
-          <div className="col flex justify-center items-center">
+          <div className="flex-1 w-full flex justify-center items-center">
             {/* Classy Visual Preview of Solver */}
-            <div className="hero-graphic-card w-full max-w-[460px] glass-panel rounded-[28px] p-6 relative overflow-hidden shadow-2xl border border-white/10 group z-10">
-              <div className="absolute inset-0 calendar-grid-line opacity-15"></div>
+            <div className="hero-graphic-card w-full max-w-[460px] bg-[#0c1929]/50 backdrop-blur-xl border border-white/10 rounded-[28px] p-6 relative overflow-hidden shadow-2xl group z-10">
+              <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:24px_24px] opacity-15"></div>
               
               <div className="relative z-10 flex flex-col gap-4">
                 <div className="flex justify-between items-center mb-1">
@@ -720,29 +703,29 @@ function HomePage() {
         <FeaturesSection />
 
         {/* FOOTER */}
-        <footer className="footer">
-          <div className="footer-content">
-            <div className="footer-left">
-              <h4 className="footer-title">Timetable Generator</h4>
-              <div className="footer-links">
-                <a className="footer-link" onClick={() => setActiveModal("about")}>About Us</a>
-                <a className="footer-link" onClick={() => setActiveModal("terms")}>Terms & Conditions</a>
-                <a className="footer-link" onClick={() => setActiveModal("contact")}>Contact Support</a>
+        <footer className="bg-gradient-to-b from-black/95 to-[#091526]/95 border-t border-white/5 py-12 pb-6 mt-20 relative w-full">
+          <div className="flex flex-col md:flex-row justify-between items-center md:items-start gap-8 max-w-[1200px] mx-auto px-6 mb-8">
+            <div className="flex flex-col items-center md:items-start gap-4">
+              <h4 className="text-xl font-extrabold bg-gradient-to-r from-[#57f1db] to-[#4fdbc8] bg-clip-text text-transparent m-0">Timetable Generator</h4>
+              <div className="flex gap-6">
+                <a className="text-sm text-slate-400 hover:text-[#57f1db] cursor-pointer transition-colors duration-200" onClick={() => setActiveModal("about")}>About Us</a>
+                <a className="text-sm text-slate-400 hover:text-[#57f1db] cursor-pointer transition-colors duration-200" onClick={() => setActiveModal("terms")}>Terms & Conditions</a>
+                <a className="text-sm text-slate-400 hover:text-[#57f1db] cursor-pointer transition-colors duration-200" onClick={() => setActiveModal("contact")}>Contact Support</a>
               </div>
             </div>
-            <div className="footer-right">
-              <div className="footer-social">
-                <div className="social-icon" onClick={() => setActiveModal("language")} title="Language Options">
+            <div className="flex items-center">
+              <div className="flex gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 hover:bg-[#57f1db]/10 hover:text-[#57f1db] hover:border-[#57f1db]/30 cursor-pointer transition-all duration-300" onClick={() => setActiveModal("language")} title="Language Options">
                   <Globe size={18} />
                 </div>
-                <div className="social-icon" onClick={() => setActiveModal("credits")} title="Credits & Help">
+                <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 hover:bg-[#57f1db]/10 hover:text-[#57f1db] hover:border-[#57f1db]/30 cursor-pointer transition-all duration-300" onClick={() => setActiveModal("credits")} title="Credits & Help">
                   <Users size={18} />
                 </div>
               </div>
             </div>
           </div>
-          <div className="footer-bottom">
-            <div className="footer-copyright">
+          <div className="border-t border-white/5 pt-6 text-center max-w-[1200px] mx-auto px-6">
+            <div className="text-xs text-slate-500">
               © {new Date().getFullYear()} Timetable Generator. Designed for educational efficiency.
             </div>
           </div>
