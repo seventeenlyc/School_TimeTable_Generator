@@ -5,7 +5,7 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle, RefreshCw, Edit3, Users } from "lucide-react";
 
 import "./TimetableDisplay.css";
 
@@ -19,6 +19,7 @@ const TimetableDisplay = ({
   
   const [viewMode, setViewMode] = useState("class");
   const [selectedItem, setSelectedItem] = useState("all");
+  const [selectedDay, setSelectedDay] = useState(0);
   const [classTimetable, setClassTimetable] = useState(initialClass || []);
   const [teacherTimetable, setTeacherTimetable] = useState(
     initialTeacher || []
@@ -242,7 +243,6 @@ const TimetableDisplay = ({
 
   const exportAsPDF = async () => {
     const isAll = selectedItem === "all";
-    const itemsToExport = isAll ? items : [selectedItem];
     const container = document.createElement("div");
 
     // Style container
@@ -255,90 +255,170 @@ const TimetableDisplay = ({
     container.style.color = "#000";
     container.style.fontFamily = "Arial, sans-serif";
 
-    // Optional title
-    const title = document.createElement("h2");
-    title.textContent = isAll
-      ? `All ${viewMode === "class" ? "Class" : "Teacher"} Timetables`
-      : `${viewMode === "class" ? "Class" : "Teacher"}: ${selectedItem}`;
-    title.style.textAlign = "center";
-    title.style.marginBottom = "30px";
-    container.appendChild(title);
+    if (viewMode === "master") {
+      const classNames = Object.keys(classTimetable);
+      const titleElement = document.createElement("h2");
+      titleElement.textContent = `Master School Schedule`;
+      titleElement.style.textAlign = "center";
+      titleElement.style.marginBottom = "30px";
+      container.appendChild(titleElement);
 
-    // Loop through items (all or just one)
-    for (const item of itemsToExport) {
-      const data = currentData[item];
-      if (!data || !data.length) continue;
-
-      const section = document.createElement("div");
-      section.style.marginBottom = "40px";
-
-      const header = document.createElement("h3");
-      header.textContent = `${viewMode === "class" ? "Class" : "Teacher"}: ${item}`;
-      header.style.marginBottom = "10px";
-      header.style.textAlign = "left";
-      header.style.color = "#000";
-      section.appendChild(header);
-
-      // Create simple clean table
-      const table = document.createElement("table");
-      table.style.width = "100%";
-      table.style.borderCollapse = "collapse";
-      table.style.fontSize = "12px";
-
-      const thead = document.createElement("thead");
-      const headRow = document.createElement("tr");
-
-      const thDay = document.createElement("th");
-      thDay.textContent = "Day/Period";
-      thDay.style.border = "1px solid #000";
-      thDay.style.padding = "6px";
-      thDay.style.backgroundColor = "#eaeaea";
-      headRow.appendChild(thDay);
-
-      // Use dynamic periods based on actual data length
-      const actualPeriods = Math.max(...data.map(day => day.length));
-      const periodsToShow = generatePeriodNames(actualPeriods);
-      
-      periodsToShow.forEach((period) => {
-        const th = document.createElement("th");
-        th.textContent = period;
-        th.style.border = "1px solid #000";
-        th.style.padding = "6px";
-        th.style.backgroundColor = "#eaeaea";
-        headRow.appendChild(th);
-      });
-
-      thead.appendChild(headRow);
-      table.appendChild(thead);
-
-      const tbody = document.createElement("tbody");
-      data.forEach((rowData, dayIndex) => {
-        const tr = document.createElement("tr");
-
-        const tdDay = document.createElement("td");
-        tdDay.textContent = days[dayIndex] || `Day ${dayIndex + 1}`;
-        tdDay.style.border = "1px solid #000";
-        tdDay.style.padding = "6px";
-        tdDay.style.backgroundColor = "#f5f5f5";
-        tr.appendChild(tdDay);
-
-        // Ensure we render all periods, even if some days have fewer periods
-        for (let periodIndex = 0; periodIndex < actualPeriods; periodIndex++) {
-          const td = document.createElement("td");
-          td.textContent = rowData[periodIndex] || "Free";
-          td.style.border = "1px solid #000";
-          td.style.padding = "6px";
-          td.style.textAlign = "center";
-          td.style.color = "#000";
-          tr.appendChild(td);
+      days.forEach((dayName, dayIdx) => {
+        const section = document.createElement("div");
+        section.style.marginBottom = "50px";
+        if (dayIdx < days.length - 1) {
+          section.style.pageBreakAfter = "always";
         }
 
-        tbody.appendChild(tr);
-      });
+        const header = document.createElement("h3");
+        header.textContent = `Schedule: ${dayName}`;
+        header.style.marginBottom = "10px";
+        header.style.textAlign = "left";
+        header.style.color = "#000";
+        section.appendChild(header);
 
-      table.appendChild(tbody);
-      section.appendChild(table);
-      container.appendChild(section);
+        const table = document.createElement("table");
+        table.style.width = "100%";
+        table.style.borderCollapse = "collapse";
+        table.style.fontSize = "12px";
+
+        const thead = document.createElement("thead");
+        const headRow = document.createElement("tr");
+
+        const thClass = document.createElement("th");
+        thClass.textContent = "Class / Period";
+        thClass.style.border = "1px solid #000";
+        thClass.style.padding = "6px";
+        thClass.style.backgroundColor = "#eaeaea";
+        headRow.appendChild(thClass);
+
+        periods.forEach((period) => {
+          const th = document.createElement("th");
+          th.textContent = period;
+          th.style.border = "1px solid #000";
+          th.style.padding = "6px";
+          th.style.backgroundColor = "#eaeaea";
+          headRow.appendChild(th);
+        });
+
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        classNames.forEach((className) => {
+          const tr = document.createElement("tr");
+
+          const tdClass = document.createElement("td");
+          tdClass.textContent = className;
+          tdClass.style.border = "1px solid #000";
+          tdClass.style.padding = "6px";
+          tdClass.style.backgroundColor = "#f5f5f5";
+          tr.appendChild(tdClass);
+
+          const dayData = classTimetable[className]?.[dayIdx] || [];
+          for (let periodIdx = 0; periodIdx < periods.length; periodIdx++) {
+            const td = document.createElement("td");
+            td.textContent = dayData[periodIdx] || "Free";
+            td.style.border = "1px solid #000";
+            td.style.padding = "6px";
+            td.style.textAlign = "center";
+            td.style.color = "#000";
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        });
+
+        table.appendChild(tbody);
+        section.appendChild(table);
+        container.appendChild(section);
+      });
+    } else {
+      // Optional title
+      const title = document.createElement("h2");
+      title.textContent = isAll
+        ? `All ${viewMode === "class" ? "Class" : "Teacher"} Timetables`
+        : `${viewMode === "class" ? "Class" : "Teacher"}: ${selectedItem}`;
+      title.style.textAlign = "center";
+      title.style.marginBottom = "30px";
+      container.appendChild(title);
+
+      const itemsToExport = isAll ? items : [selectedItem];
+      // Loop through items (all or just one)
+      for (const item of itemsToExport) {
+        const data = currentData[item];
+        if (!data || !data.length) continue;
+
+        const section = document.createElement("div");
+        section.style.marginBottom = "40px";
+
+        const header = document.createElement("h3");
+        header.textContent = `${viewMode === "class" ? "Class" : "Teacher"}: ${item}`;
+        header.style.marginBottom = "10px";
+        header.style.textAlign = "left";
+        header.style.color = "#000";
+        section.appendChild(header);
+
+        // Create simple clean table
+        const table = document.createElement("table");
+        table.style.width = "100%";
+        table.style.borderCollapse = "collapse";
+        table.style.fontSize = "12px";
+
+        const thead = document.createElement("thead");
+        const headRow = document.createElement("tr");
+
+        const thDay = document.createElement("th");
+        thDay.textContent = "Day/Period";
+        thDay.style.border = "1px solid #000";
+        thDay.style.padding = "6px";
+        thDay.style.backgroundColor = "#eaeaea";
+        headRow.appendChild(thDay);
+
+        // Use dynamic periods based on actual data length
+        const actualPeriods = Math.max(...data.map(day => day.length));
+        const periodsToShow = generatePeriodNames(actualPeriods);
+        
+        periodsToShow.forEach((period) => {
+          const th = document.createElement("th");
+          th.textContent = period;
+          th.style.border = "1px solid #000";
+          th.style.padding = "6px";
+          th.style.backgroundColor = "#eaeaea";
+          headRow.appendChild(th);
+        });
+
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        data.forEach((rowData, dayIndex) => {
+          const tr = document.createElement("tr");
+
+          const tdDay = document.createElement("td");
+          tdDay.textContent = days[dayIndex] || `Day ${dayIndex + 1}`;
+          tdDay.style.border = "1px solid #000";
+          tdDay.style.padding = "6px";
+          tdDay.style.backgroundColor = "#f5f5f5";
+          tr.appendChild(tdDay);
+
+          // Ensure we render all periods, even if some days have fewer periods
+          for (let periodIndex = 0; periodIndex < actualPeriods; periodIndex++) {
+            const td = document.createElement("td");
+            td.textContent = rowData[periodIndex] || "Free";
+            td.style.border = "1px solid #000";
+            td.style.padding = "6px";
+            td.style.textAlign = "center";
+            td.style.color = "#000";
+            tr.appendChild(td);
+          }
+
+          tbody.appendChild(tr);
+        });
+
+        table.appendChild(tbody);
+        section.appendChild(table);
+        container.appendChild(section);
+      }
     }
 
     document.body.appendChild(container);
@@ -369,7 +449,9 @@ const TimetableDisplay = ({
         pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, imgHeight);
       }
 
-      const filename = isAll
+      const filename = viewMode === "master"
+        ? `master_school_schedule.pdf`
+        : isAll
         ? `all_${viewMode}_timetables.pdf`
         : `${viewMode}_${selectedItem}_timetable.pdf`;
 
@@ -384,8 +466,34 @@ const TimetableDisplay = ({
 
   const exportAsExcel = () => {
     const wb = XLSX.utils.book_new();
-    const combined = [];
 
+    if (viewMode === "master") {
+      const classNames = Object.keys(classTimetable);
+      days.forEach((dayName, dayIdx) => {
+        const sheetData = [];
+        sheetData.push(["Class / Period", ...periods]);
+        classNames.forEach((className) => {
+          const row = [...(classTimetable[className]?.[dayIdx] || [])];
+          while (row.length < periods.length) {
+            row.push("Free");
+          }
+          sheetData.push([className, ...row]);
+        });
+        const ws = XLSX.utils.aoa_to_sheet(sheetData);
+        XLSX.utils.book_append_sheet(wb, ws, dayName);
+      });
+
+      const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const filename = `master_school_schedule.xlsx`;
+
+      saveAs(
+        new Blob([wbout], { type: "application/octet-stream" }),
+        filename
+      );
+      return;
+    }
+
+    const combined = [];
     if (selectedItem === "all") {
       items.forEach((item) => {
         const data = currentData[item];
@@ -517,6 +625,57 @@ const TimetableDisplay = ({
     );
   };
 
+  const renderMasterGrid = () => {
+    const classNames = Object.keys(classTimetable);
+    if (classNames.length === 0) {
+      return <div className="no-data-message-td">No data available</div>;
+    }
+
+    return (
+      <div className="table-container-td">
+        <table className="timetable-table-td">
+          <thead className="table-header-td">
+            <tr>
+              <th className="header-cell-td">Class / Period</th>
+              {periods.map((period, index) => (
+                <th key={index} className="header-cell-td period-header-td">
+                  {period}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="table-body-td">
+            {classNames.map((className) => {
+              const classSchedule = classTimetable[className];
+              const daySchedule = classSchedule && classSchedule[selectedDay] ? classSchedule[selectedDay] : [];
+              return (
+                <tr key={className} className="table-row-td">
+                  <td className="day-cell-td">{className}</td>
+                  {Array.from({ length: maxPeriods }, (_, periodIndex) => {
+                    const period = daySchedule[periodIndex];
+                    if (period === "Free" || period === "" || period === undefined || period === null) {
+                      return (
+                        <td key={periodIndex} className="period-cell-td">
+                          <span className="free-period-td">Free</span>
+                        </td>
+                      );
+                    } else {
+                      return (
+                        <td key={periodIndex} className="period-cell-td">
+                          <span className="subject-badge-td">{period}</span>
+                        </td>
+                      );
+                    }
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   return (
     <div className={`${!showEditOptions ? "dark-gradient-bg-td" : ""}`}>
       <div
@@ -541,7 +700,7 @@ const TimetableDisplay = ({
                   })
                 }
               >
-                <span className="button-icon-td">✏️</span>
+                <Edit3 size={14} className="button-icon-td" />
                 Edit timetable
               </button>
 
@@ -562,7 +721,7 @@ const TimetableDisplay = ({
                   })
                 }
               >
-                <span className="button-icon-td">👥</span>
+                <Users size={14} className="button-icon-td" />
                 Edit teachers
               </button>
             </div>
@@ -571,7 +730,13 @@ const TimetableDisplay = ({
         <div className="container-td">
           <div className="controls-section-td">
             <div className="view-mode-controls-td">
-              <div className="button-group-td">
+              <div className="button-group-td relative">
+                <div 
+                  className="active-tab-indicator-td"
+                  style={{
+                    transform: `translateX(${viewMode === 'class' ? '0%' : viewMode === 'teacher' ? '100%' : '200%'})`
+                  }}
+                />
                 <button
                   type="button"
                   className={`mode-button-td ${
@@ -596,26 +761,52 @@ const TimetableDisplay = ({
                 >
                   Teacher Timetables
                 </button>
+                <button
+                  type="button"
+                  className={`mode-button-td ${
+                    viewMode === "master" ? "active-mode-td" : ""
+                  }`}
+                  onClick={() => {
+                    setViewMode("master");
+                    setSelectedItem("all");
+                  }}
+                >
+                  Master Grid
+                </button>
               </div>
             </div>
             <div
               className="selector-controls-td"
               style={{ paddingLeft: "10px" }}
             >
-              <select
-                className="item-selector-td"
-                value={selectedItem}
-                onChange={(e) => setSelectedItem(e.target.value)}
-              >
-                <option value="all">
-                  All {viewMode === "class" ? "Classes" : "Teachers"}
-                </option>
-                {items.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
+              {viewMode === "master" ? (
+                <select
+                  className="item-selector-td"
+                  value={selectedDay}
+                  onChange={(e) => setSelectedDay(parseInt(e.target.value))}
+                >
+                  {days.map((dayName, idx) => (
+                    <option key={idx} value={idx}>
+                      {dayName}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <select
+                  className="item-selector-td"
+                  value={selectedItem}
+                  onChange={(e) => setSelectedItem(e.target.value)}
+                >
+                  <option value="all">
+                    All {viewMode === "class" ? "Classes" : "Teachers"}
                   </option>
-                ))}
-              </select>
+                  {items.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
@@ -625,7 +816,9 @@ const TimetableDisplay = ({
               style={{ paddingRight: "1rem", paddingLeft: "1rem" }}
             >
               <h4 className="card-title-td">
-                {selectedItem === "all" 
+                {viewMode === "master"
+                  ? `Master Grid: ${days[selectedDay] || 'Schedule'}`
+                  : selectedItem === "all" 
                   ? `All ${viewMode === "class" ? "Classes" : "Teachers"}` 
                   : `${viewMode === "class" ? "Class" : "Teacher"}: ${selectedItem}`
                 }
@@ -648,7 +841,9 @@ const TimetableDisplay = ({
               </div>
             </div>
             <div className="card-body-td" id="timetable-container">
-              {selectedItem === "all" 
+              {viewMode === "master"
+                ? renderMasterGrid()
+                : selectedItem === "all" 
                 ? renderAllTimetables() 
                 : renderTimetable(currentData[selectedItem])
               }

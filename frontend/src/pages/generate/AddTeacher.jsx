@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Loader2, X, Save, AlertTriangle, RefreshCw } from "lucide-react";
+import { Plus, Loader2, X, Save, AlertTriangle, RefreshCw, Users, Edit3 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth, useUser } from "@clerk/clerk-react";
 import DropdownChecklist from "./components/DropdownChecklist";
@@ -468,7 +468,7 @@ function AddTeacher() {
                 onClick={handleBackToTeachers}
                 title="Go back to edit teachers"
               >
-                <span className="button-icon-td">👥</span>
+                <Users size={14} className="button-icon-td" />
                 Edit Teachers
               </button>
 
@@ -496,7 +496,7 @@ function AddTeacher() {
                   })
                 }
               >
-                <span className="button-icon-td">✏️</span>
+                <Edit3 size={14} className="button-icon-td" />
                 Edit timetable
               </button>
 

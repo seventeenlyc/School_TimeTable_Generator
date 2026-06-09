@@ -95,36 +95,56 @@ const EditTimetable = () => {
       const period2 =
         newClass[selectedItem][second.dayIndex][second.periodIndex];
 
-      let teacher1 =
-        period1 !== "Free" && period1 !== ""
-          ? period1.split("(")[1].split(")")[0]
-          : null;
-      let teacher2 =
-        period2 !== "Free" && period2 !== ""
-          ? period2.split("(")[1].split(")")[0]
-          : null;
+      let teacher1 = null;
+      if (period1 && period1 !== "Free" && period1 !== "" && period1.includes("(") && period1.includes(")")) {
+        teacher1 = period1.split("(")[1].split(")")[0];
+      }
+      let teacher2 = null;
+      if (period2 && period2 !== "Free" && period2 !== "" && period2.includes("(") && period2.includes(")")) {
+        teacher2 = period2.split("(")[1].split(")")[0];
+      }
       console.log(teacher1, teacher2);
 
-      if (
-        teacher1 &&
-        teacher2 &&
-        newTeacher[teacher1][second.dayIndex][second.periodIndex] === "Free" &&
-        newTeacher[teacher2][first.dayIndex][first.periodIndex] === "Free"
-      ) {
+      let isTeacher1Free = true;
+      if (teacher1 && newTeacher[teacher1]) {
+        const destPeriod = newTeacher[teacher1][second.dayIndex][second.periodIndex];
+        isTeacher1Free = (destPeriod === "Free" || (teacher2 && teacher1 === teacher2));
+      } else if (teacher1) {
+        isTeacher1Free = false;
+      }
+
+      let isTeacher2Free = true;
+      if (teacher2 && newTeacher[teacher2]) {
+        const destPeriod = newTeacher[teacher2][first.dayIndex][first.periodIndex];
+        isTeacher2Free = (destPeriod === "Free" || (teacher1 && teacher1 === teacher2));
+      } else if (teacher2) {
+        isTeacher2Free = false;
+      }
+
+      if (isTeacher1Free && isTeacher2Free) {
         setShowPositiveMessage(true);
         setTimeout(() => {
           setShowPositiveMessage(false);
           newClass[selectedItem][first.dayIndex][first.periodIndex] = period2;
           newClass[selectedItem][second.dayIndex][second.periodIndex] = period1;
 
-          // Swap teacher periods
-          newTeacher[teacher1][second.dayIndex][second.periodIndex] =
-            newTeacher[teacher1][first.dayIndex][first.periodIndex];
-          newTeacher[teacher1][first.dayIndex][first.periodIndex] = "Free";
+          // Swap teacher periods safely
+          const val1_t1 = (teacher1 && newTeacher[teacher1]) ? newTeacher[teacher1][first.dayIndex][first.periodIndex] : null;
+          const val2_t2 = (teacher2 && newTeacher[teacher2]) ? newTeacher[teacher2][second.dayIndex][second.periodIndex] : null;
 
-          newTeacher[teacher2][first.dayIndex][first.periodIndex] =
-            newTeacher[teacher2][second.dayIndex][second.periodIndex];
-          newTeacher[teacher2][second.dayIndex][second.periodIndex] = "Free";
+          if (teacher1 && newTeacher[teacher1]) {
+            newTeacher[teacher1][first.dayIndex][first.periodIndex] = "Free";
+          }
+          if (teacher2 && newTeacher[teacher2]) {
+            newTeacher[teacher2][second.dayIndex][second.periodIndex] = "Free";
+          }
+
+          if (teacher1 && newTeacher[teacher1]) {
+            newTeacher[teacher1][second.dayIndex][second.periodIndex] = val1_t1;
+          }
+          if (teacher2 && newTeacher[teacher2]) {
+            newTeacher[teacher2][first.dayIndex][first.periodIndex] = val2_t2;
+          }
 
           setCurrentClassTimeTable(newClass);
           setCurrentTeacherTimeTable(newTeacher);
@@ -148,6 +168,62 @@ const EditTimetable = () => {
 
   const handleSave = async () => {
     try {
+      const validationData = {
+        class_timetable: currentClassTimeTable,
+        teacher_timetable: currentTeacherTimeTable,
+        workingDays: parseInt(location.state.workingDays) || 5,
+        periods: parseInt(location.state.periods) || 8,
+        classes: location.state.classes || [],
+        subjects: location.state.subjects || [],
+        teachers: location.state.teacherData ? location.state.teacherData.map(teacher => ({
+          name: teacher.name,
+          subjects: teacher.subjects,
+          mainSubject: teacher.mainSubject,
+          labPeriod: (teacher.labPeriod && teacher.labPeriod !== "Select Lab Period") ? teacher.labPeriod : null,
+          assigned_class: (teacher.assigned_class && teacher.assigned_class !== "Select Class") ? teacher.assigned_class : null,
+          periods: teacher.periods.map(p => ({
+            class_name: p.class_name,
+            subject: p.subject,
+            noOfPeriods: p.noOfPeriods
+          }))
+        })) : []
+      };
+
+      const token = await getToken();
+
+      // Perform validation check on backend
+      const validationResponse = await fetchWithAuth(
+        token,
+        `${import.meta.env.VITE_API_BASE_URL}/validate-edit`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(validationData),
+        }
+      );
+
+      if (!validationResponse.ok) {
+        throw new Error("Validation check failed on the server.");
+      }
+
+      const validationResult = await validationResponse.json();
+      if (!validationResult.valid) {
+        // Show validation errors and cancel save
+        validationResult.errors.forEach(err => {
+          toast.error(err, { duration: 6000 });
+        });
+        return;
+      }
+
+      // If warnings exist, show them but allow save to continue
+      if (validationResult.warnings && validationResult.warnings.length > 0) {
+        validationResult.warnings.forEach(warn => {
+          toast.error(`Warning: ${warn}`, { duration: 5000, icon: "⚠️" });
+        });
+      }
+
       const timetableData = {
         class_timetable: currentClassTimeTable,
         teacher_timetable: currentTeacherTimeTable,
@@ -160,7 +236,6 @@ const EditTimetable = () => {
         userId : user.id,
       };
       if (id) {
-        const token = await getToken();
         const response = await fetchWithAuth(
           token,
           `${import.meta.env.VITE_API_BASE_URL}/update-timetable/${id}`,
@@ -188,7 +263,6 @@ const EditTimetable = () => {
           },
         });
       } else {
-        const token = await getToken();
         const response = await fetchWithAuth(
           token,
           `${import.meta.env.VITE_API_BASE_URL}/add`,
@@ -219,7 +293,7 @@ const EditTimetable = () => {
 
     } catch (error) {
       console.log(error);
-      toast.error(error)
+      toast.error(error.message || String(error));
     }
   };
 
