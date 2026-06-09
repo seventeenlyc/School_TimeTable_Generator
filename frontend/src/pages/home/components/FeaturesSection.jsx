@@ -69,38 +69,43 @@ const features = [
 
 function FeaturesSection() {
   return (
-    <div className="features-section">
-      <div className="features-header">
-        <h2 className="features-title">Powerful Features</h2>
-        <p className="features-subtitle">Everything you need to create perfect timetables</p>
+    <div className="py-16 mt-16 relative">
+      <div className="text-center mb-12">
+        <h2 className="text-5xl font-black bg-gradient-to-r from-[#00ff87] to-[#32c8b8] bg-clip-text text-transparent mb-4 [text-shadow:0_0_10px_rgba(0,255,135,0.3)]">
+          Powerful Features
+        </h2>
+        <p className="text-[1.2rem] text-white/80 max-w-[600px] mx-auto">
+          Everything you need to create perfect timetables
+        </p>
       </div>
-      <div className="features-circle">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-8 max-w-[1200px] mx-auto px-4">
         {features.map((feature, index) => {
           const Icon = feature.icon;
           return (
             <div
               key={index}
-              className="feature-card"
+              className="group w-full h-[300px] md:h-[250px] max-[480px]:h-[220px] max-[480px]:hover:h-[400px] animate-slide-in-up [animation-fill-mode:both]"
               style={{
-                '--animation-delay': `${index * 0.1}s`
+                animationDelay: `${index * 0.1}s`
               }}
             >
-              <div className="feature-card-inner">
-                <div className="feature-card-front">
-                  <div className={`feature-icon bg-gradient-to-br ${feature.gradient}`}>
-                    <Icon size={32} className="icon-main" />
+              <div className="relative w-full h-full text-center transition-transform duration-600 [transform-style:preserve-3d] cursor-pointer group-hover:[transform:rotateY(180deg)]">
+                {/* Front Side */}
+                <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] rounded-[20px] p-8 flex flex-col justify-center items-center bg-black/50 border-2 border-[#3282b8]/40 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.4)]">
+                  <div className={`w-[80px] h-[80px] rounded-[20px] flex items-center justify-center mb-6 shadow-[0_10px_30px_rgba(0,0,0,0.4)] bg-gradient-to-br ${feature.gradient}`}>
+                    <Icon size={32} className="text-white [filter:drop-shadow(0_0_10px_rgba(255,255,255,0.4))]" />
                   </div>
-                  <h3 className="feature-title">{feature.title}</h3>
-                  <p className="feature-description">{feature.description}</p>
+                  <h3 className="text-[1.4rem] font-bold text-white mb-4 leading-tight">{feature.title}</h3>
+                  <p className="text-[1rem] text-white/85 leading-normal m-0">{feature.description}</p>
                 </div>
-                <div className="feature-card-back">
-                  <div className={`feature-icon-large bg-gradient-to-br ${feature.gradient}`}>
-                    <Icon size={32} className="icon-large" />
+                {/* Back Side */}
+                <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] rounded-[20px] p-8 flex flex-col justify-center items-center bg-black/85 border-2 border-[#00ff87]/60 [transform:rotateY(180deg)] backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.4)]">
+                  <div className={`w-[100px] h-[100px] rounded-[25px] flex items-center justify-center mb-8 shadow-[0_15px_40px_rgba(0,0,0,0.5)] bg-gradient-to-br ${feature.gradient}`}>
+                    <Icon size={32} className="text-white [filter:drop-shadow(0_0_15px_rgba(255,255,255,0.6))]" />
                   </div>
-                  <div className="feature-details">
-                    <h4 className="feature-back-title">{feature.title}</h4>
-                    <p className="feature-back-description">{feature.backDescription}</p>
-                    {/* <div className="feature-shine"></div> */}
+                  <div className="text-center">
+                    <h4 className="text-[1.6rem] font-extrabold text-[#00ff87] mb-4">{feature.title}</h4>
+                    <p className="text-[1.1rem] text-white/90 leading-relaxed m-0">{feature.backDescription}</p>
                   </div>
                 </div>
               </div>
