@@ -424,18 +424,18 @@ function AddTeacher() {
 
           <div className="error-actions">
             <button
-              className="action-button retry-button"
+              className="flex items-center gap-2 bg-[linear-gradient(135deg,#dc2626_0%,#b91c1c_100%)] text-white py-3 px-6 border-none rounded-lg font-medium cursor-pointer transition-all duration-200 ease-in-out no-underline hover:bg-[linear-gradient(135deg,#b91c1c_0%,#991b1b_100%)] hover:-translate-y-[1px] hover:shadow-[0_4px_12px_rgba(220,38,38,0.3)] active:translate-y-0 max-md:w-full max-md:justify-center"
               onClick={handleRegenerateWithCurrentData}
               disabled={loading}
             >
               {loading ? (
                 <>
-                  <Loader2 className="icon-ge animate-spin" />
+                  <Loader2 className="w-5 h-5 animate-spin" />
                   Retrying...
                 </>
               ) : (
                 <>
-                  <RefreshCw className="icon-ge" />
+                  <RefreshCw className="w-5 h-5" />
                   Try Again
                 </>
               )}
@@ -449,22 +449,22 @@ function AddTeacher() {
   // If timetable is generated, show the timetable display
   if (timetableData) {
     return (
-      <div className="dark-gradient-bg-ge">
-        <div className="container-ge">
+      <div className="bg-[linear-gradient(135deg,#000000_0%,#0a1a2e_25%,#16213e_50%,#0f4c75_75%,#3282b8_100%)] min-h-screen text-white relative overflow-x-hidden py-8 mt-[60px] max-md:py-4">
+        <div className="max-w-[80%] mx-auto px-6 max-md:px-4 max-md:max-w-full max-sm:px-3">
           <div className="timetable-header">
-            <h2 className="section-title-ge">Generated Timetable</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white [text-shadow:0_2px_4px_rgba(0,0,0,0.3)] max-md:text-xl max-sm:text-lg">Generated Timetable</h2>
             <div className="action-buttons-container">
               <button
-                className="action-button save-button"
+                className="flex items-center gap-2 py-3 px-6 border-none rounded-xl text-base font-medium cursor-pointer transition-all duration-300 ease-in-out text-white no-underline max-md:w-full max-md:justify-center bg-[linear-gradient(135deg,#f59e0b_0%,#d97706_100%)] hover:bg-[linear-gradient(135deg,#d97706_0%,#b45309_100%)] hover:-translate-y-[2px]"
                 onClick={handleSavetoDb}
                 title="Save"
               >
-                <Save className="icon-ge" />
+                <Save className="w-5 h-5" />
                 Save
               </button>
 
               <button
-                className="action-button edit-button"
+                className="flex items-center gap-2 py-3 px-6 border-none rounded-xl text-base font-medium cursor-pointer transition-all duration-300 ease-in-out text-white no-underline max-md:w-full max-md:justify-center bg-[linear-gradient(135deg,#f59e0b_0%,#d97706_100%)] hover:bg-[linear-gradient(135deg,#d97706_0%,#b45309_100%)] hover:-translate-y-[2px]"
                 onClick={handleBackToTeachers}
                 title="Go back to edit teachers"
               >
@@ -474,7 +474,7 @@ function AddTeacher() {
 
               <button
                 type="button"
-                className="action-button primary-button"
+                className="flex items-center gap-2 py-3 px-6 border-none rounded-xl text-base font-medium cursor-pointer transition-all duration-300 ease-in-out text-white no-underline max-md:w-full max-md:justify-center bg-[linear-gradient(135deg,#3b82f6_0%,#2563eb_100%)] hover:bg-[linear-gradient(135deg,#2563eb_0%,#1d4ed8_100%)] hover:-translate-y-[2px]"
                 onClick={() =>
                   navigate("/edit-timetable", {
                     state: {
@@ -501,19 +501,19 @@ function AddTeacher() {
               </button>
 
               <button
-                className="action-button regenerate-button"
+                className="flex items-center gap-2 py-3 px-6 border-none rounded-xl text-base font-medium cursor-pointer transition-all duration-300 ease-in-out text-white no-underline max-md:w-full max-md:justify-center bg-[linear-gradient(135deg,#10b981_0%,#059669_100%)] hover:bg-[linear-gradient(135deg,#059669_0%,#047857_100%)] hover:-translate-y-[2px] disabled:bg-[linear-gradient(135deg,#6b7280_0%,#4b5563_100%)] disabled:cursor-not-allowed disabled:transform-none"
                 onClick={handleRegenerateWithCurrentData}
                 disabled={loading}
                 title="Regenerate timetable with current data"
               >
                 {loading ? (
                   <>
-                    <Loader2 className="icon-ge animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin" />
                     Regenerating...
                   </>
                 ) : (
                   <>
-                    <Plus className="icon-ge" />
+                    <Plus className="w-5 h-5" />
                     Regenerate
                   </>
                 )}
@@ -532,12 +532,12 @@ function AddTeacher() {
   }
 
   return (
-    <div className="dark-gradient-bg-ge">
-      <div className="container-at">
-        <div className="header-section">
-          <h2 className="section-title-ge">Add Teachers</h2>
+    <div className="bg-[linear-gradient(135deg,#000000_0%,#0a1a2e_25%,#16213e_50%,#0f4c75_75%,#3282b8_100%)] min-h-screen text-white relative overflow-x-hidden py-8 mt-[60px] max-md:py-4">
+      <div className="max-w-full w-full px-8">
+        <div className="flex justify-between items-center mb-8">
+          <h2 className="text-2xl font-semibold mb-4 text-white [text-shadow:0_2px_4px_rgba(0,0,0,0.3)] max-md:text-xl max-sm:text-lg">Add Teachers</h2>
           {savedTeachersData && (
-            <div className="info-alert">
+            <div className="bg-[rgba(59,130,246,0.1)] border border-[rgba(59,130,246,0.3)] rounded-lg p-4 text-[#93c5fd] text-[0.9rem] backdrop-blur-[10px]">
               <strong>Note:</strong> You can edit the data below and regenerate
               the timetable
             </div>
@@ -550,32 +550,32 @@ function AddTeacher() {
             {errorDetails ? (
               renderErrorDetails()
             ) : (
-              <div className="error-alert">
-                <AlertTriangle className="icon-ge" />
+              <div className="bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)] rounded-lg p-4 text-[#fca5a5] text-[0.9rem] mb-6 backdrop-blur-[10px]">
+                <AlertTriangle className="w-5 h-5" />
                 {error}
               </div>
             )}
           </div>
         )}
 
-        <div className="teachers-container">
+        <div className="flex flex-col gap-8">
           {teachers.map((teacher, index) => {
             return (
-              <div className="teacher-card" key={index}>
+              <div className="bg-[rgba(255,255,255,0.05)] border-2 border-[rgba(255,255,255,0.1)] rounded-2xl p-8 relative backdrop-blur-[10px] transition-all duration-300 ease-in-out w-full box-border hover:bg-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)] hover:-translate-y-[2px] hover:shadow-[0_8px_32px_rgba(0,0,0,0.3)] max-sm:p-6" key={index}>
                 {/* Delete Teacher Button */}
                 {teachers.length > 1 && (
                   <button
                     onClick={() => handleDeleteTeacher(index)}
-                    className="delete-teacher-btn"
+                    className="absolute top-4 right-4 bg-[linear-gradient(135deg,#ef4444_0%,#dc2626_100%)] border-none rounded-lg p-2 text-white cursor-pointer transition-all duration-300 ease-in-out flex items-center justify-center hover:bg-[linear-gradient(135deg,#dc2626_0%,#b91c1c_100%)] hover:scale-105"
                     title="Delete Teacher"
                   >
-                    <X className="icon-ge" />
+                    <X className="w-5 h-5" />
                   </button>
                 )}
 
-                <div className="teacher-info-row">
-                  <div className="input-group-ge">
-                    <label className="input-label">Name</label>
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-6 mb-8 max-md:grid-cols-1 max-md:gap-4 max-sm:gap-3">
+                  <div className="flex flex-col gap-4">
+                    <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">Name</label>
                     <input
                       type="text"
                       className="form-input-ge"
@@ -587,8 +587,8 @@ function AddTeacher() {
                     />
                   </div>
 
-                  <div className="input-group-ge">
-                    <label className="input-label">Subjects</label>
+                  <div className="flex flex-col gap-4">
+                    <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">Subjects</label>
                     <DropdownChecklist
                       options={subjects}
                       selected={teacher.subjects}
@@ -598,8 +598,8 @@ function AddTeacher() {
                     />
                   </div>
 
-                  <div className="input-group-ge">
-                    <label className="input-label">Main Subject</label>
+                  <div className="flex flex-col gap-4">
+                    <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">Main Subject</label>
                     <select
                       className="form-select-ge"
                       value={teacher.mainSubject}
@@ -618,8 +618,8 @@ function AddTeacher() {
                     </select>
                   </div>
 
-                  <div className="input-group-ge">
-                    <label className="input-label">Lab Period</label>
+                  <div className="flex flex-col gap-4">
+                    <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">Lab Period</label>
                     <select
                       className="form-select-ge"
                       value={teacher.labPeriod}
@@ -639,12 +639,12 @@ function AddTeacher() {
                   </div>
                 </div>
 
-                <div className="class-teacher-section">
-                  <label className="class-teacher-label">
+                <div className="flex items-center gap-4 mb-8 p-4 bg-[rgba(255,255,255,0.03)] rounded-xl border border-[rgba(255,255,255,0.1)] max-md:flex-col max-md:items-stretch">
+                  <label className="text-[1.1rem] font-medium text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.3)] whitespace-nowrap">
                     If class teacher, select class
                   </label>
                   <select
-                    className="form-select-ge class-select"
+                    className="form-select-ge max-w-[200px] max-md:max-w-full"
                     value={teacher.assigned_class}
                     onChange={(e) => handleChangeClass(index, e.target.value)}
                   >
@@ -666,25 +666,25 @@ function AddTeacher() {
                   </select>
                 </div>
 
-                <div className="periods-section">
-                  <h3 className="periods-title">Assign Periods</h3>
-                  <div className="periods-container">
+                <div className="mt-8">
+                  <h3 className="text-[1.3rem] font-semibold text-white mb-6 [text-shadow:0_2px_4px_rgba(0,0,0,0.3)]">Assign Periods</h3>
+                  <div className="flex flex-col gap-4 mb-6">
                     {teacher.periods.map((period, ind) => {
                       return (
-                        <div className="period-row" key={ind}>
+                        <div className="grid grid-cols-3 gap-4 items-end p-4 bg-[rgba(255,255,255,0.03)] rounded-xl border border-[rgba(255,255,255,0.1)] relative max-md:grid-cols-1 max-md:pt-8 max-sm:p-6 max-sm:pt-6" key={ind}>
                           {/* Delete Period Button - positioned absolutely in top-right */}
                           {teacher.periods.length > 1 && (
                             <button
                               onClick={() => handleDeletePeriod(index, ind)}
-                              className="delete-period-btn"
+                              className="absolute top-2 right-2 bg-[linear-gradient(135deg,#ef4444_0%,#dc2626_100%)] border-none rounded-md p-1 text-white cursor-pointer transition-all duration-300 ease-in-out flex items-center justify-center h-8 w-8 z-10 hover:bg-[linear-gradient(135deg,#dc2626_0%,#b91c1c_100%)] hover:scale-105 max-sm:h-7 max-sm:w-7"
                               title="Delete Period"
                             >
-                              <X className="icon-ge" />
+                              <X className="w-5 h-5" />
                             </button>
                           )}
 
-                          <div className="input-group-ge">
-                            <label className="input-label">Class</label>
+                          <div className="flex flex-col gap-4">
+                            <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">Class</label>
                             <select
                               className="form-select-ge"
                               value={period.class_name}
@@ -707,8 +707,8 @@ function AddTeacher() {
                             </select>
                           </div>
 
-                          <div className="input-group-ge">
-                            <label className="input-label">Subject</label>
+                          <div className="flex flex-col gap-4">
+                            <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">Subject</label>
                             <select
                               className="form-select-ge"
                               value={period.subject}
@@ -735,8 +735,8 @@ function AddTeacher() {
                             </select>
                           </div>
 
-                          <div className="input-group-ge">
-                            <label className="input-label">No of Periods</label>
+                          <div className="flex flex-col gap-4">
+                            <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">No of Periods</label>
                             <input
                               type="number"
                               className="form-input-ge"
@@ -760,7 +760,7 @@ function AddTeacher() {
                     onClick={() => handleAddPeriod(index)}
                     className="add-button-ge"
                   >
-                    <Plus className="icon-ge" />
+                    <Plus className="w-5 h-5" />
                     Add another period
                   </button>
                 </div>
@@ -768,25 +768,25 @@ function AddTeacher() {
             );
           })}
 
-          <div className="add-teacher-container">
+          <div className="flex justify-center mt-8">
             <button
               onClick={handleAddTeacher}
-              className="add-button-ge add-teacher-btn"
+              className="flex items-center justify-center p-4 border-2 border-transparent rounded-[12px] bg-[linear-gradient(135deg,#10b981_0%,#059669_100%)] text-white text-[1.1rem] font-medium cursor-pointer transition-all duration-300 ease-in-out gap-2 min-h-[56px] hover:bg-[linear-gradient(135deg,#059669_0%,#047857_100%)] hover:-translate-y-[2px] hover:shadow-[0_8px_25px_rgba(16,185,129,0.4)] active:translate-y-0 w-full max-w-[400px] p-5"
             >
-              <Plus className="icon-ge" />
+              <Plus className="w-5 h-5" />
               Add another Teacher
             </button>
           </div>
 
-          <div className="next-button-container-ge">
+          <div className="flex justify-center items-center mt-12 mb-8">
             <button
-              className="next-button-ge"
+              className="flex items-center justify-center py-5 px-10 border-none rounded-[15px] bg-[linear-gradient(135deg,#1f2937_0%,#374151_100%)] text-white text-[1.25rem] font-semibold cursor-pointer transition-all duration-300 ease-in-out gap-3 min-w-[200px] relative overflow-hidden group hover:bg-[linear-gradient(135deg,#374151_0%,#4b5563_100%)] hover:-translate-y-[3px] hover:shadow-[0_10px_30px_rgba(0,0,0,0.3)] active:-translate-y-[1px] max-md:py-4 max-md:px-8 max-md:text-[1.1rem] max-md:min-w-[180px] max-sm:py-3.5 max-sm:px-6 max-sm:text-base max-sm:min-w-[160px] before:content-[''] before:absolute before:top-0 before:left-[-100%] before:w-full before:h-full before:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent)] before:transition-[left] before:duration-500 before:ease-in-out hover:before:left-full"
               onClick={generateTimetable}
               disabled={loading}
             >
               {loading ? (
                 <>
-                  <Loader2 className="arrow-icon-ge animate-spin" />
+                  <Loader2 className="w-6 h-6 animate-spin" />
                   Generating...
                 </>
               ) : savedTeachersData ? (

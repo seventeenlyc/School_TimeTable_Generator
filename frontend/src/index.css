@@ -8,6 +8,7 @@
   --animate-shine: shine 3s infinite;
   --animate-slide-in-up: slideInUp 0.8s ease-out both;
   --animate-slide-in-down: slideInDown 0.3s ease;
+  --animate-fadeInUp: fadeInUp 0.8s ease-out forwards;
 
   @keyframes float {
     0% {
@@ -81,5 +82,172 @@
       opacity: 1;
       transform: translateY(0);
     }
+  }
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+/* Custom scrollbars for timetable containers */
+.custom-scrollbar::-webkit-scrollbar {
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #3282b8 0%, #0f4c75 100%);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #0f4c75 0%, #3282b8 100%);
+}
+
+/* Custom form elements */
+.form-select-ge {
+  width: 100%;
+  padding: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1em;
+}
+
+.form-select-ge:focus {
+  outline: none;
+  border-color: #3282b8;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 20px rgba(50, 130, 184, 0.3);
+}
+
+.form-select-ge option {
+  background: #1a1a1a;
+  color: white;
+  padding: 0.5rem;
+}
+
+.item-selector-td, .item-selector-ett {
+  width: 100%;
+  padding: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1em;
+}
+
+.item-selector-td:focus, .item-selector-ett:focus {
+  outline: 2px solid #3282b8;
+  outline-offset: 2px;
+  border-color: #3282b8;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 20px rgba(50, 130, 184, 0.3);
+}
+
+.item-selector-td option, .item-selector-ett option {
+  background: #1a1a1a;
+  color: white;
+  padding: 0.5rem;
+}
+
+/* Media query overrides (for print layouts and high-contrast styling) */
+@media print {
+  .dark-gradient-bg-td, .dark-gradient-bg-ett, .dark-gradient-bg-ge {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .controls-section-td,
+  .export-buttons-td,
+  .action-buttons-section-td,
+  .controls-section-ett,
+  .instruction-message-ett {
+    display: none !important;
+  }
+  
+  .timetable-card-td, .timetable-card-ett {
+    border: 1px solid #000 !important;
+    background: white !important;
+    box-shadow: none !important;
+  }
+  
+  .card-header-td, .card-header-ett {
+    background: #f5f5f5 !important;
+    color: black !important;
+  }
+  
+  .header-cell-td, .day-cell-td, .header-cell-ett, .day-cell-ett {
+    background: #e5e5e5 !important;
+    color: black !important;
+  }
+  
+  .period-cell-td, .period-cell-ett {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .subject-badge-td, .subject-badge-ett {
+    background: #f0f0f0 !important;
+    color: black !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+}
+
+@media (prefers-contrast: high) {
+  .dark-gradient-bg-td, .dark-gradient-bg-ett, .dark-gradient-bg-ge {
+    background: #000000 !important;
+  }
+  
+  .timetable-card-td, .timetable-card-ett {
+    border: 2px solid #ffffff !important;
+  }
+  
+  .mode-button-td.active-mode-td {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  
+  .subject-badge-td, .subject-badge-ett {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #ffffff !important;
+  }
+  
+  .save-button-ett {
+    background: #00ff00 !important;
+    color: #000000 !important;
+  }
+  
+  .reset-button-ett {
+    background: #ffff00 !important;
+    color: #000000 !important;
   }
 }

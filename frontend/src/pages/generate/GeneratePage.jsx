@@ -2,6 +2,7 @@ import { ArrowBigRight, ArrowBigRightIcon, Plus } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
+
 import toast from "react-hot-toast";
 
 function GeneratePage() {
@@ -13,8 +14,8 @@ function GeneratePage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+      window.scrollTo(0, 0);
+    }, []);
 
   const handleAddSubject = () => {
     setSubjects([...subjects, ""]);
@@ -71,13 +72,13 @@ function GeneratePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#030712] via-[#0b1329] to-[#0d285c] py-8 mt-[60px] text-white overflow-x-hidden relative">
-      <div className="max-w-[90%] md:max-w-[80%] mx-auto px-4 md:px-6 relative z-10">
+    <div className="bg-[linear-gradient(135deg,#000000_0%,#0a1a2e_25%,#16213e_50%,#0f4c75_75%,#3282b8_100%)] min-h-screen text-white relative overflow-x-hidden py-8 mt-[60px] max-md:py-4">
+      <div className="max-w-[80%] mx-auto px-6 max-md:px-4 max-md:max-w-full max-sm:px-3">
         <div className="mb-8">
-          <h3 className="text-xl md:text-2xl font-semibold mb-4 text-white drop-shadow-md">Title</h3>
+          <h3 className="text-2xl font-semibold mb-4 text-white [text-shadow:0_2px_4px_rgba(0,0,0,0.3)] max-md:text-xl max-sm:text-lg">Title</h3>
           <input
             type="text"
-            className="w-full p-4 border border-white/10 rounded-xl bg-white/5 backdrop-blur-md text-white text-base transition-all duration-300 focus:outline-none focus:border-blue-500 focus:bg-white/10 focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] placeholder:text-white/60"
+            className="w-full p-4 border-2 border-[rgba(255,255,255,0.1)] rounded-[12px] bg-[rgba(255,255,255,0.05)] text-white text-base transition-all duration-300 ease-in-out backdrop-blur-[10px] focus:outline-none focus:border-[#3282b8] focus:bg-[rgba(255,255,255,0.1)] focus:shadow-[0_0_20px_rgba(50,130,184,0.3)] placeholder:text-[rgba(255,255,255,0.6)] max-md:p-3.5 max-sm:p-3 max-sm:text-sm"
             placeholder="Enter timetable title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -85,10 +86,10 @@ function GeneratePage() {
         </div>
 
         <div className="mb-8">
-          <h3 className="text-xl md:text-2xl font-semibold mb-4 text-white drop-shadow-md">No of working days</h3>
+          <h3 className="text-2xl font-semibold mb-4 text-white [text-shadow:0_2px_4px_rgba(0,0,0,0.3)] max-md:text-xl max-sm:text-lg">No of working days</h3>
           <input
             type="number"
-            className="w-full p-4 border border-white/10 rounded-xl bg-white/5 backdrop-blur-md text-white text-base transition-all duration-300 focus:outline-none focus:border-blue-500 focus:bg-white/10 focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] placeholder:text-white/60"
+            className="w-full p-4 border-2 border-[rgba(255,255,255,0.1)] rounded-[12px] bg-[rgba(255,255,255,0.05)] text-white text-base transition-all duration-300 ease-in-out backdrop-blur-[10px] focus:outline-none focus:border-[#3282b8] focus:bg-[rgba(255,255,255,0.1)] focus:shadow-[0_0_20px_rgba(50,130,184,0.3)] placeholder:text-[rgba(255,255,255,0.6)] max-md:p-3.5 max-sm:p-3 max-sm:text-sm"
             placeholder="Enter working days (e.g., 5)"
             value={workingDays}
             onChange={(e) => setWorkingDays(e.target.value)}
@@ -96,10 +97,10 @@ function GeneratePage() {
         </div>
 
         <div className="mb-8">
-          <h3 className="text-xl md:text-2xl font-semibold mb-4 text-white drop-shadow-md">No of periods per day</h3>
+          <h3 className="text-2xl font-semibold mb-4 text-white [text-shadow:0_2px_4px_rgba(0,0,0,0.3)] max-md:text-xl max-sm:text-lg">No of periods per day</h3>
           <input
             type="number"
-            className="w-full p-4 border border-white/10 rounded-xl bg-white/5 backdrop-blur-md text-white text-base transition-all duration-300 focus:outline-none focus:border-blue-500 focus:bg-white/10 focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] placeholder:text-white/60"
+            className="w-full p-4 border-2 border-[rgba(255,255,255,0.1)] rounded-[12px] bg-[rgba(255,255,255,0.05)] text-white text-base transition-all duration-300 ease-in-out backdrop-blur-[10px] focus:outline-none focus:border-[#3282b8] focus:bg-[rgba(255,255,255,0.1)] focus:shadow-[0_0_20px_rgba(50,130,184,0.3)] placeholder:text-[rgba(255,255,255,0.6)] max-md:p-3.5 max-sm:p-3 max-sm:text-sm"
             placeholder="Enter periods per day (e.g., 8)"
             value={periods}
             onChange={(e) => setPeriods(e.target.value)}
@@ -107,14 +108,14 @@ function GeneratePage() {
         </div>
 
         <div className="mb-12">
-          <h3 className="text-xl md:text-2xl font-semibold mb-4 text-white drop-shadow-md">Add Classes</h3>
+          <h3 className="text-2xl font-semibold mb-4 text-white [text-shadow:0_2px_4px_rgba(0,0,0,0.3)] max-md:text-xl max-sm:text-lg">Add Classes</h3>
           <div className="flex flex-col gap-4">
             {classes.map((clas, index) => {
               return (
                 <input
                   key={index}
                   type="text"
-                  className="w-full p-4 border border-white/10 rounded-xl bg-white/5 backdrop-blur-md text-white text-base transition-all duration-300 focus:outline-none focus:border-blue-500 focus:bg-white/10 focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] placeholder:text-white/60 mb-0"
+                  className="w-full p-4 border-2 border-[rgba(255,255,255,0.1)] rounded-[12px] bg-[rgba(255,255,255,0.05)] text-white text-base transition-all duration-300 ease-in-out backdrop-blur-[10px] focus:outline-none focus:border-[#3282b8] focus:bg-[rgba(255,255,255,0.1)] focus:shadow-[0_0_20px_rgba(50,130,184,0.3)] placeholder:text-[rgba(255,255,255,0.6)] max-md:p-3.5 max-sm:p-3 max-sm:text-sm"
                   placeholder={`Class ${index + 1} (e.g., Grade 10A)`}
                   value={clas}
                   onChange={(e) => handleChangeClasses(index, e.target.value)}
@@ -124,7 +125,7 @@ function GeneratePage() {
 
             <button
               onClick={handleAddClasses}
-              className="flex items-center justify-center p-4 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-base font-medium cursor-pointer transition-all duration-300 gap-2 min-h-[56px] hover:translate-y-[-2px] hover:shadow-[0_8px_25px_rgba(16,185,129,0.4)] active:translate-y-0"
+              className="flex items-center justify-center p-4 border-2 border-transparent rounded-[12px] bg-[linear-gradient(135deg,#10b981_0%,#059669_100%)] text-white text-base font-medium cursor-pointer transition-all duration-300 ease-in-out gap-2 min-h-[56px] hover:bg-[linear-gradient(135deg,#059669_0%,#047857_100%)] hover:-translate-y-[2px] hover:shadow-[0_8px_25px_rgba(16,185,129,0.4)] active:translate-y-0 max-md:p-3.5 max-md:text-sm max-sm:p-3 max-sm:text-xs"
             >
               <Plus className="w-5 h-5" />
               <span>Add one more Class</span>
@@ -133,14 +134,14 @@ function GeneratePage() {
         </div>
 
         <div className="mb-12">
-          <h3 className="text-xl md:text-2xl font-semibold mb-4 text-white drop-shadow-md">Add subjects</h3>
+          <h3 className="text-2xl font-semibold mb-4 text-white [text-shadow:0_2px_4px_rgba(0,0,0,0.3)] max-md:text-xl max-sm:text-lg">Add subjects</h3>
           <div className="flex flex-col gap-4">
             {subjects.map((subject, index) => {
               return (
                 <input
                   key={index}
                   type="text"
-                  className="w-full p-4 border border-white/10 rounded-xl bg-white/5 backdrop-blur-md text-white text-base transition-all duration-300 focus:outline-none focus:border-blue-500 focus:bg-white/10 focus:shadow-[0_0_20px_rgba(59,130,246,0.25)] placeholder:text-white/60 mb-0"
+                  className="w-full p-4 border-2 border-[rgba(255,255,255,0.1)] rounded-[12px] bg-[rgba(255,255,255,0.05)] text-white text-base transition-all duration-300 ease-in-out backdrop-blur-[10px] focus:outline-none focus:border-[#3282b8] focus:bg-[rgba(255,255,255,0.1)] focus:shadow-[0_0_20px_rgba(50,130,184,0.3)] placeholder:text-[rgba(255,255,255,0.6)] max-md:p-3.5 max-sm:p-3 max-sm:text-sm"
                   placeholder={`Subject ${index + 1} (e.g., Mathematics)`}
                   value={subject}
                   onChange={(e) => handleChangeSubject(index, e.target.value)}
@@ -150,7 +151,7 @@ function GeneratePage() {
 
             <button
               onClick={handleAddSubject}
-              className="flex items-center justify-center p-4 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-base font-medium cursor-pointer transition-all duration-300 gap-2 min-h-[56px] hover:translate-y-[-2px] hover:shadow-[0_8px_25px_rgba(16,185,129,0.4)] active:translate-y-0"
+              className="flex items-center justify-center p-4 border-2 border-transparent rounded-[12px] bg-[linear-gradient(135deg,#10b981_0%,#059669_100%)] text-white text-base font-medium cursor-pointer transition-all duration-300 ease-in-out gap-2 min-h-[56px] hover:bg-[linear-gradient(135deg,#059669_0%,#047857_100%)] hover:-translate-y-[2px] hover:shadow-[0_8px_25px_rgba(16,185,129,0.4)] active:translate-y-0 max-md:p-3.5 max-md:text-sm max-sm:p-3 max-sm:text-xs"
             >
               <Plus className="w-5 h-5" />
               <span>Add one more Subject</span>
@@ -160,11 +161,11 @@ function GeneratePage() {
 
         <div className="flex justify-center items-center mt-12 mb-8">
           <button
-            className="flex items-center justify-center py-4 px-8 border-none rounded-[15px] bg-gradient-to-r from-slate-800 to-slate-700 text-white text-xl font-semibold cursor-pointer transition-all duration-300 gap-3 min-w-[200px] relative overflow-hidden group hover:translate-y-[-3px] hover:shadow-2xl active:translate-y-[-1px]"
+            className="flex items-center justify-center py-5 px-10 border-none rounded-[15px] bg-[linear-gradient(135deg,#1f2937_0%,#374151_100%)] text-white text-[1.25rem] font-semibold cursor-pointer transition-all duration-300 ease-in-out gap-3 min-w-[200px] relative overflow-hidden group hover:bg-[linear-gradient(135deg,#374151_0%,#4b5563_100%)] hover:-translate-y-[3px] hover:shadow-[0_10px_30px_rgba(0,0,0,0.3)] active:-translate-y-[1px] max-md:py-4 max-md:px-8 max-md:text-[1.1rem] max-md:min-w-[180px] max-sm:py-3.5 max-sm:px-6 max-sm:text-base max-sm:min-w-[160px] before:content-[''] before:absolute before:top-0 before:left-[-100%] before:w-full before:h-full before:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent)] before:transition-[left] before:duration-500 before:ease-in-out hover:before:left-full"
             onClick={handleNext}
           >
             <span>Add Teachers</span>
-            <ArrowBigRight className="w-6 h-6 transition-transform duration-300 group-hover:translate-x-1.5" />
+            <ArrowBigRight className="w-6 h-6 transition-transform duration-300 ease-in-out group-hover:translate-x-[5px]" />
           </button>
         </div>
       </div>
