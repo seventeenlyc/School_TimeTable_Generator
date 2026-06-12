@@ -1,13 +1,27 @@
 import React, { useState, useEffect } from "react";
+import WizardSteps from "../components/WizardSteps";
+import { getSubjectColor } from "../../utils/subjectColor";
 import { useLocation, useNavigate } from "react-router";
 import EditTimetable from "./components/EditTimetable";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle, RefreshCw, Save, Edit3, Users, ExternalLink, Download, Loader2, Printer, Clock } from "lucide-react";
+import toast from "react-hot-toast";
 
 
+
+function FloatingOrbs() {
+  return (
+    <div className="fixed inset-0 w-full h-full pointer-events-none z-0 overflow-hidden" aria-hidden="true">
+      <div className="absolute top-[8%] left-[3%] w-[550px] h-[550px] rounded-full opacity-[0.06]"
+        style={{ background: "radial-gradient(circle, #57f1db 0%, transparent 70%)", filter: "blur(95px)" }} />
+      <div className="absolute bottom-[10%] right-[2%] w-[680px] h-[680px] rounded-full opacity-[0.05]"
+        style={{ background: "radial-gradient(circle, #7c3aed 0%, transparent 70%)", filter: "blur(115px)" }} />
+    </div>
+  );
+}
 
 const TimetableDisplay = ({
   classTimetable: initialClass,
@@ -26,6 +40,8 @@ const TimetableDisplay = ({
   const [errorMessage, setErrorMessage] = useState("");
   const [errorDetails, setErrorDetails] = useState(null);
   const [errorType, setErrorType] = useState("");
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   // Dynamic configuration based on data or location state
   const [workingDays, setWorkingDays] = useState(5);
@@ -114,9 +130,43 @@ const TimetableDisplay = ({
     }
   }, [location]);
 
+  const [teacherData, setTeacherData] = useState([]);
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  useEffect(() => {
+    if (location.state?.teacherData) {
+      setTeacherData(location.state.teacherData);
+    }
+  }, [location]);
+
+  // Compute workload stats from teacher timetable
+  const computeWorkloads = () => {
+    if (!teacherTimetable || Object.keys(teacherTimetable).length === 0) return [];
+    return Object.entries(teacherTimetable).map(([name, schedule]) => {
+      const assigned = schedule.flat().filter(s => s && s !== "Free").length;
+      const total = schedule.flat().length;
+      // Try to get max from teacherData if available
+      const info = teacherData.find(t => t.name === name);
+      const maxPeriods = info
+        ? (info.periods || []).reduce((sum, p) => sum + (parseInt(p.noOfPeriods) || 0), 0)
+        : null;
+      return { name, assigned, total, maxPeriods };
+    }).sort((a, b) => b.assigned - a.assigned);
+  };
+
+  const [startTime, setStartTime] = useState("08:30");
+  const [periodDuration, setPeriodDuration] = useState(50); // minutes
+
+  const getPeriodTime = (periodIndex) => {
+    const [h, m] = startTime.split(":").map(Number);
+    const totalMins = h * 60 + m + periodIndex * periodDuration;
+    const endMins = totalMins + periodDuration;
+    const fmt = (mins) => `${String(Math.floor(mins / 60) % 24).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+    return `${fmt(totalMins)}–${fmt(endMins)}`;
+  };
 
   const currentData = viewMode === "class" ? classTimetable : teacherTimetable;
   const items = currentData ? Object.keys(currentData) : [];
@@ -241,6 +291,7 @@ const TimetableDisplay = ({
   }
 
   const exportAsPDF = async () => {
+    setExportingPDF(true);
     const isAll = selectedItem === "all";
     const itemsToExport = isAll ? items : [selectedItem];
     const container = document.createElement("div");
@@ -376,13 +427,130 @@ const TimetableDisplay = ({
       pdf.save(filename);
     } catch (err) {
       console.error("PDF export failed", err);
-      alert("PDF export failed. Please try again.");
+      toast.error("PDF export failed. Please try again.");
     } finally {
       document.body.removeChild(container);
+      setExportingPDF(false);
     }
   };
 
+  const getNextWeekdayDate = (dayIndex) => {
+    const today = new Date();
+    const resultDate = new Date(today);
+    const targetJsDay = dayIndex === 6 ? 0 : dayIndex + 1;
+    const currentJsDay = today.getDay();
+    
+    let distance = targetJsDay - currentJsDay;
+    if (distance < 0) {
+      distance += 7;
+    }
+    
+    resultDate.setDate(today.getDate() + distance);
+    
+    const yyyy = resultDate.getFullYear();
+    const mm = String(resultDate.getMonth() + 1).padStart(2, "0");
+    const dd = String(resultDate.getDate()).padStart(2, "0");
+    
+    return `${yyyy}${mm}${dd}`;
+  };
+
+  const exportAsICS = () => {
+    const isAll = selectedItem === "all";
+    const itemsToExport = isAll ? items : [selectedItem];
+    
+    const icsDays = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+    const periodTimes = [
+      { start: "083000", end: "091500" },
+      { start: "091500", end: "100000" },
+      { start: "100000", end: "104500" },
+      { start: "110000", end: "114500" },
+      { start: "114500", end: "123000" },
+      { start: "123000", end: "131500" },
+      { start: "140000", end: "144500" },
+      { start: "144500", end: "153000" },
+      { start: "153000", end: "161500" },
+      { start: "161500", end: "170000" },
+      { start: "170000", end: "174500" },
+      { start: "174500", end: "183000" }
+    ];
+
+    let icsContent = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Antigravity//School Timetable Generator//EN",
+      "CALSCALE:GREGORIAN",
+      "METHOD:PUBLISH"
+    ];
+
+    itemsToExport.forEach((item) => {
+      const data = currentData[item];
+      if (!data) return;
+
+      data.forEach((rowData, dayIndex) => {
+        const dayStr = icsDays[dayIndex] || "MO";
+        const startDateStr = getNextWeekdayDate(dayIndex);
+
+        rowData.forEach((period, periodIndex) => {
+          if (period === "Free" || !period) return;
+
+          const timeSlot = periodTimes[periodIndex] || { start: "080000", end: "084500" };
+          
+          let summary = period;
+          let description = "";
+
+          if (viewMode === "class") {
+            if (period.includes("(") && period.includes(")")) {
+              const parts = period.split("(");
+              const subject = parts[0].trim();
+              const teacher = parts[1].replace(")", "").trim();
+              summary = `${subject} (${item})`;
+              description = `Teacher: ${teacher}`;
+            } else {
+              summary = `${period} (${item})`;
+            }
+          } else {
+            if (period.includes("-")) {
+              const parts = period.split("-");
+              const subject = parts[0].trim();
+              const cls = parts[1].trim();
+              summary = `${subject} - Class ${cls}`;
+              description = `Teacher: ${item}`;
+            } else {
+              summary = `${period} (Teacher: ${item})`;
+            }
+          }
+
+          const uid = `${item}_d${dayIndex}_p${periodIndex}_${Math.random().toString(36).substring(2, 9)}@timetable`;
+          const dtstamp = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+
+          icsContent.push("BEGIN:VEVENT");
+          icsContent.push(`UID:${uid}`);
+          icsContent.push(`DTSTAMP:${dtstamp}`);
+          icsContent.push(`DTSTART;TZID=Asia/Kolkata:${startDateStr}T${timeSlot.start}`);
+          icsContent.push(`DTEND;TZID=Asia/Kolkata:${startDateStr}T${timeSlot.end}`);
+          icsContent.push(`RRULE:FREQ=WEEKLY;BYDAY=${dayStr}`);
+          icsContent.push(`SUMMARY:${summary}`);
+          icsContent.push(`DESCRIPTION:${description}`);
+          icsContent.push("END:VEVENT");
+        });
+      });
+    });
+
+    icsContent.push("END:VCALENDAR");
+    const icsString = icsContent.join("\r\n");
+
+    const blob = new Blob([icsString], { type: "text/calendar;charset=utf-8" });
+    const filename = isAll
+      ? `all_${viewMode}_timetables.ics`
+      : `${viewMode}_${selectedItem}_timetable.ics`;
+
+    saveAs(blob, filename);
+    toast.success("iCalendar exported successfully!");
+  };
+
   const exportAsExcel = () => {
+    setExportingExcel(true);
+    try {
     const wb = XLSX.utils.book_new();
     const combined = [];
 
@@ -436,6 +604,29 @@ const TimetableDisplay = ({
       new Blob([wbout], { type: "application/octet-stream" }),
       filename
     );
+    toast.success("Excel exported successfully!");
+    } catch (err) {
+      console.error("Excel export failed", err);
+      toast.error("Excel export failed.");
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
+  const formatPeriodContent = (period) => {
+    if (period.includes("(") && period.includes(")")) {
+      const parts = period.split("(");
+      const subject = parts[0].trim();
+      const teacher = parts[1].replace(")", "").trim();
+      const col = getSubjectColor(subject);
+      return (
+        <div className="flex flex-col items-center justify-center gap-0.5 py-1">
+          <span className="font-extrabold text-[0.825rem] tracking-wide leading-tight" style={{ color: col.text }}>{subject}</span>
+          <span className="text-[0.65rem] font-medium tracking-normal" style={{ color: col.text, opacity: 0.7 }}>{teacher}</span>
+        </div>
+      );
+    }
+    return <span className="font-extrabold text-[0.825rem] tracking-wide text-white">{period}</span>;
   };
 
   const renderTimetable = (data) => {
@@ -451,34 +642,57 @@ const TimetableDisplay = ({
     const daysToShow = generateDayNames(actualDays);
     const periodsToShow = generatePeriodNames(actualPeriods);
 
+    const dayColWidth = "12%";
+    const periodColWidth = `${88 / periodsToShow.length}%`;
+
     return (
-      <div className="overflow-x-auto rounded-none bg-[rgba(255,255,255,0.02)] border-none border-t border-b border-[rgba(255,255,255,0.1)] custom-scrollbar">
-        <table className="w-full border-collapse text-[0.9rem] bg-transparent min-w-full max-md:text-[0.8rem] max-sm:text-[0.75rem]">
-          <thead className="bg-[linear-gradient(135deg,#1f2937_0%,#374151_100%)]">
+      <div className="overflow-x-auto rounded-2xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] custom-scrollbar">
+        <table className="w-full table-fixed border-collapse text-[0.9rem] bg-transparent min-w-[900px] max-md:text-[0.8rem] max-sm:text-[0.75rem]">
+          <thead className="bg-slate-900/80">
             <tr>
-              <th className="p-4 max-md:py-3 max-md:px-2 max-sm:py-2 max-sm:px-1 text-center font-semibold text-white border border-[rgba(255,255,255,0.1)] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)] relative">Day/Period</th>
+              <th 
+                style={{ width: dayColWidth }}
+                className="p-4 max-md:py-3 max-md:px-2 max-sm:py-2 max-sm:px-1 text-center font-bold text-[#57f1db] border border-slate-800/80 relative text-[0.85rem] uppercase tracking-wider bg-slate-950/40"
+              >
+                Day/Period
+              </th>
               {periodsToShow.map((period, index) => (
-                <th key={index} className="p-4 max-md:py-3 max-md:px-2 max-sm:py-2 max-sm:px-1 text-center font-semibold text-white border border-[rgba(255,255,255,0.1)] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)] relative bg-[linear-gradient(135deg,#374151_0%,#4b5563_100%)]">
-                  {period}
+                <th
+                  key={index}
+                  style={{ width: periodColWidth }}
+                  className="p-3 max-md:py-2 max-md:px-2 max-sm:py-1 max-sm:px-1 text-center font-bold text-slate-300 border border-slate-800/80 relative bg-slate-900/50"
+                >
+                  <div className="text-[0.75rem] uppercase tracking-wider">{period}</div>
+                  <div className="text-[0.6rem] text-slate-500 font-medium mt-0.5 tabular-nums">{getPeriodTime(index)}</div>
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="bg-[rgba(255,255,255,0.02)]">
+          <tbody className="bg-[rgba(255,255,255,0.01)]">
             {data.map((dayData, dayIndex) => (
-              <tr key={dayIndex} className="transition-all duration-300 ease-in-out border-b border-[rgba(255,255,255,0.05)] last:border-b-0 hover:bg-[rgba(255,255,255,0.05)] hover:scale-[1.01]">
-                <td className="p-4 max-md:py-3 max-md:px-2 max-sm:py-2 max-sm:px-1 font-semibold text-white bg-[linear-gradient(135deg,#0f4c75_0%,#3282b8_100%)] border border-[rgba(255,255,255,0.1)] text-center [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">
+              <tr key={dayIndex} className="transition-all duration-300 ease-in-out border-b border-[rgba(255,255,255,0.05)] last:border-b-0 hover:bg-[rgba(255,255,255,0.03)] hover:scale-[1.002]">
+                <td className="p-4 max-md:py-3 max-md:px-2 max-sm:py-2 max-sm:px-1 font-extrabold text-white bg-gradient-to-r from-[#0f4c75]/80 to-[#3282b8]/60 border border-slate-800/60 text-center [text-shadow:0_1px_2px_rgba(0,0,0,0.3)] text-sm tracking-wide">
                   {daysToShow[dayIndex] || `Day ${dayIndex + 1}`}
                 </td>
                 {/* Render all periods, padding with "Free" if necessary */}
                 {Array.from({ length: actualPeriods }, (_, periodIndex) => (
-                  <td key={periodIndex} className="p-4 max-md:py-3 max-md:px-2 max-sm:py-2 max-sm:px-1 text-center border border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.02)] transition-all duration-300 ease-in-out hover:bg-[rgba(255,255,255,0.05)]">
+                  <td key={periodIndex} className="p-4 max-md:py-3 max-md:px-2 max-sm:py-2 max-sm:px-1 text-center border border-[rgba(255,255,255,0.05)] bg-transparent transition-all duration-300 ease-in-out hover:bg-[rgba(255,255,255,0.03)]">
                     {(() => {
                       const period = dayData[periodIndex];
                       if (period === "Free" || period === "" || period === undefined || period === null) {
-                        return <span className="text-[rgba(255,255,255,0.5)] italic text-[0.85rem]">Free</span>;
+                        return <span className="text-slate-500/60 italic text-[0.85rem] font-medium tracking-wide">Free</span>;
                       } else {
-                        return <span className="inline-block py-1.5 px-3 bg-[linear-gradient(135deg,#3b82f6_0%,#1d4ed8_100%)] text-white rounded-lg text-xs font-medium [text-shadow:0_1px_2px_rgba(0,0,0,0.3)] shadow-[0_2px_8px_rgba(59,130,246,0.3)] transition-all duration-300 ease-in-out hover:-translate-y-[1px] hover:shadow-[0_4px_12px_rgba(59,130,246,0.4)] max-md:py-1 max-md:px-2 max-md:text-[0.7rem] max-sm:py-1 max-sm:px-2 max-sm:text-[0.65rem]">{period}</span>;
+                        const subjectName = period.includes("(") ? period.split("(")[0].trim() : period;
+                        const col = getSubjectColor(subjectName);
+                        return (
+                          <div
+                            title={period}
+                            className="inline-flex flex-col items-center justify-center py-1.5 px-3 rounded-xl shadow-[0_2px_10px_rgba(0,0,0,0.2)] hover:scale-[1.03] transition-all duration-300 w-full max-w-[130px] min-h-[50px] mx-auto"
+                            style={{ background: col.bg, border: `1px solid ${col.border}40` }}
+                          >
+                            {formatPeriodContent(period)}
+                          </div>
+                        );
                       }
                     })()}
                   </td>
@@ -496,40 +710,86 @@ const TimetableDisplay = ({
       return <div className="text-center p-8 text-[rgba(255,255,255,0.6)] text-base">No data available</div>;
     }
 
+    const scrollToSection = (item) => {
+      const el = document.getElementById(`tt-section-${item.replace(/\s/g, "_")}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+
     return (
       <div className="all-timetables-container">
+        {/* Horizontal scrollable tab strip */}
+        <div style={{ overflowX: "auto", display: "flex", gap: 8, padding: "0 0 12px", marginBottom: 8 }} className="no-scrollbar">
+          {items.map((item) => (
+            <button
+              key={item}
+              onClick={() => scrollToSection(item)}
+              style={{
+                flexShrink: 0, padding: "6px 14px", borderRadius: 999,
+                fontSize: 11, fontWeight: 700, cursor: "pointer",
+                background: "rgba(87,241,219,0.07)",
+                border: "1px solid rgba(87,241,219,0.2)",
+                color: "#57f1db",
+                transition: "all 0.2s",
+                whiteSpace: "nowrap",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(87,241,219,0.14)"; e.currentTarget.style.borderColor = "rgba(87,241,219,0.5)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(87,241,219,0.07)"; e.currentTarget.style.borderColor = "rgba(87,241,219,0.2)"; }}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "3rem" }}>
         {items.map((item) => (
-          <div key={item} className="individual-timetable-section" style={{ marginBottom: '3rem' }}>
+          <div key={item} id={`tt-section-${item.replace(/\s/g, "_")}`} className="individual-timetable-section" style={{ scrollMarginTop: "120px" }}>
             <h5 style={{
               marginBottom: '1rem',
-              padding: '0.5rem 1rem',
-              backgroundColor: '#f8f9fa',
-              color: '#212529',
-              borderRadius: '8px',
-              fontWeight: 'bold'
+              padding: '0.6rem 1.2rem',
+              background: "linear-gradient(135deg, rgba(16, 28, 54, 0.45) 0%, rgba(10, 18, 36, 0.55) 100%)",
+              border: "1px solid rgba(87, 241, 219, 0.15)",
+              color: '#57f1db',
+              borderRadius: '12px',
+              fontWeight: 'bold',
+              backdropFilter: 'blur(10px)',
+              fontSize: '1rem',
+              display: 'inline-block'
             }}>
               {viewMode === "class" ? "Class" : "Teacher"}: {item}
             </h5>
             {renderTimetable(currentData[item])}
           </div>
         ))}
+        </div>
       </div>
     );
   };
 
   return (
-    <div className={`${!showEditOptions ? "bg-[linear-gradient(135deg,#000000_0%,#0a1a2e_25%,#16213e_50%,#0f4c75_75%,#3282b8_100%)] min-h-screen text-white relative overflow-x-hidden mt-[60px]" : ""}`}>
+    <div className={`${!showEditOptions ? "min-h-screen text-white relative overflow-x-hidden pt-[120px]" : ""}`}
+      style={!showEditOptions ? {
+        background: "radial-gradient(ellipse 100% 60% at 15% 10%, #081225 0%, #030814 60%, #02050b 100%)",
+        fontFamily: "'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif"
+      } : {}}
+    >
+      {!showEditOptions && <FloatingOrbs />}
       <div
-        className={`${!showEditOptions ? "max-w-[1200px] mx-auto px-5" : ""}`}
-        style={{ padding: `${showEditOptions ? "" : "5rem"}`, paddingTop: 0 }}
+        className={`${!showEditOptions ? "max-w-[1450px] mx-auto px-5 relative z-10" : ""}`}
+        style={{ padding: `${showEditOptions ? "" : "3rem"}`, paddingTop: 0 }}
       >
+        {!showEditOptions && <WizardSteps current={3} />}
         {location.state?.timetableId && !showEditOptions && (
-          <div className="timetable-header">
-            <h2 className="section-title-ge">{location.state.title}</h2>
-            <div className="action-buttons-container">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
+            <div>
+              <h2 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight m-0">{location.state.title}</h2>
+              <p className="text-sm text-slate-400 mt-2 m-0 max-w-xl">Saved configurations and timetable grids.</p>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                className="flex items-center gap-2 py-4 px-8 border-none rounded-xl text-base font-medium cursor-pointer transition-all duration-300 ease-in-out text-white no-underline relative overflow-hidden focus:outline-[#3282b8] focus:outline-2 focus:outline-offset-2 before:content-[''] before:absolute before:top-0 before:left-[-100%] before:w-full before:h-full before:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent)] before:transition-[left] before:duration-500 before:ease-in-out hover:before:left-full max-md:justify-center max-sm:py-3.5 max-sm:px-6 max-sm:text-[0.9rem] bg-[linear-gradient(135deg,#f59e0b_0%,#d97706_100%)] hover:bg-[linear-gradient(135deg,#d97706_0%,#b45309_100%)] hover:-translate-y-[2px] hover:shadow-[0_8px_25px_rgba(245,158,11,0.4)]"
+                className="flex items-center gap-2 py-2.5 px-5 border border-[#a78bfa]/40 rounded-full text-sm font-bold cursor-pointer transition-all duration-300 ease-in-out text-[#a78bfa] bg-[#a78bfa]/10 hover:bg-[#a78bfa]/20 hover:scale-[1.02]"
+                style={{ borderRadius: "9999px" }}
                 onClick={() =>
                   navigate("/edit-timetable", {
                     state: {
@@ -537,17 +797,23 @@ const TimetableDisplay = ({
                       teacherTimetable: teacherTimetable,
                       id: location.state.timetableId,
                       teacherData: location.state.teacherData,
+                      classes: location.state.classes,
+                      subjects: location.state.subjects,
+                      workingDays: location.state.workingDays,
+                      periods: location.state.periods,
+                      title: location.state.title,
                     },
                   })
                 }
               >
-                <span className="text-[1.1rem]">✏️</span>
+                <Edit3 size={14} />
                 Edit timetable
               </button>
 
               <button
                 type="button"
-                className="flex items-center gap-2 py-4 px-8 border-none rounded-xl text-base font-medium cursor-pointer transition-all duration-300 ease-in-out text-white no-underline relative overflow-hidden focus:outline-[#3282b8] focus:outline-2 focus:outline-offset-2 before:content-[''] before:absolute before:top-0 before:left-[-100%] before:w-full before:h-full before:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent)] before:transition-[left] before:duration-500 before:ease-in-out hover:before:left-full max-md:justify-center max-sm:py-3.5 max-sm:px-6 max-sm:text-[0.9rem] bg-[linear-gradient(135deg,#3b82f6_0%,#2563eb_100%)] hover:bg-[linear-gradient(135deg,#2563eb_0%,#1d4ed8_100%)] hover:-translate-y-[2px] hover:shadow-[0_8px_25px_rgba(59,130,246,0.4)]"
+                className="flex items-center gap-2 py-2.5 px-5 border border-slate-700/80 rounded-full text-sm font-bold cursor-pointer transition-all duration-300 ease-in-out text-slate-200 bg-slate-800/60 hover:bg-slate-700/60 hover:scale-[1.02]"
+                style={{ borderRadius: "9999px" }}
                 onClick={() =>
                   navigate("/generate/add-teachers", {
                     state: {
@@ -562,48 +828,48 @@ const TimetableDisplay = ({
                   })
                 }
               >
-                <span className="text-[1.1rem]">👥</span>
-                Edit teachers
+                <Users size={14} />
+                Edit Teachers
               </button>
             </div>
           </div>
         )}
         <div className="max-w-full m-0 p-0 w-full min-w-full box-border">
-          <div className="grid grid-cols-2 gap-8 mb-8 items-end p-0 max-md:grid-cols-1 max-md:gap-4">
-            <div className="flex flex-col gap-2">
-              <div className="flex bg-[rgba(255,255,255,0.05)] rounded-xl p-1 backdrop-blur-[10px] border border-[rgba(255,255,255,0.1)]">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 items-center p-0">
+            <div className="flex justify-start">
+              <div className="flex bg-slate-900/60 rounded-full p-1 backdrop-blur-[12px] border border-slate-800/80 w-full max-w-md">
                 <button
                   type="button"
-                  className={`py-4 px-6 border-none rounded-lg bg-transparent text-[rgba(255,255,255,0.7)] text-base font-medium cursor-pointer transition-all duration-300 ease-in-out relative overflow-hidden focus:outline-[#3282b8] focus:outline-2 focus:outline-offset-2 hover:not-[.active-mode-td]:bg-[rgba(255,255,255,0.1)] hover:not-[.active-mode-td]:text-white ${
-                    viewMode === "class" ? "bg-[linear-gradient(135deg,#3282b8_0%,#0f4c75_100%)] text-white shadow-[0_4px_15px_rgba(50,130,184,0.3)]" : ""
+                  className={`flex-1 py-2.5 px-5 border-none rounded-full bg-transparent text-slate-400 text-sm font-bold cursor-pointer transition-all duration-300 ease-in-out hover:text-white ${
+                    viewMode === "class" ? "bg-teal-500/10 text-[#57f1db] border border-teal-500/20 shadow-[0_0_15px_rgba(87,241,219,0.1)]" : ""
                   }`}
+                  style={{ borderRadius: "9999px" }}
                   onClick={() => {
                     setViewMode("class");
                     setSelectedItem("all");
                   }}
                 >
-                  Class Timetables
+                  Class View
                 </button>
                 <button
                   type="button"
-                  className={`py-4 px-6 border-none rounded-lg bg-transparent text-[rgba(255,255,255,0.7)] text-base font-medium cursor-pointer transition-all duration-300 ease-in-out relative overflow-hidden focus:outline-[#3282b8] focus:outline-2 focus:outline-offset-2 hover:not-[.active-mode-td]:bg-[rgba(255,255,255,0.1)] hover:not-[.active-mode-td]:text-white ${
-                    viewMode === "teacher" ? "bg-[linear-gradient(135deg,#3282b8_0%,#0f4c75_100%)] text-white shadow-[0_4px_15px_rgba(50,130,184,0.3)]" : ""
+                  className={`flex-1 py-2.5 px-5 border-none rounded-full bg-transparent text-slate-400 text-sm font-bold cursor-pointer transition-all duration-300 ease-in-out hover:text-white ${
+                    viewMode === "teacher" ? "bg-purple-500/10 text-[#a78bfa] border border-purple-500/20 shadow-[0_0_15px_rgba(167,139,250,0.1)]" : ""
                   }`}
+                  style={{ borderRadius: "9999px" }}
                   onClick={() => {
                     setViewMode("teacher");
                     setSelectedItem("all");
                   }}
                 >
-                  Teacher Timetables
+                  Teacher View
                 </button>
               </div>
             </div>
-            <div
-              className="flex flex-col gap-2"
-              style={{ paddingLeft: "10px" }}
-            >
+            
+            <div className="flex justify-start md:justify-end">
               <select
-                className="item-selector-td"
+                className="item-selector-td w-full max-w-md"
                 value={selectedItem}
                 onChange={(e) => setSelectedItem(e.target.value)}
               >
@@ -619,35 +885,86 @@ const TimetableDisplay = ({
             </div>
           </div>
 
-          <div className="bg-[rgba(255,255,255,0.05)] border-2 border-[rgba(255,255,255,0.1)] rounded-none overflow-hidden backdrop-blur-[10px] shadow-[0_8px_32px_rgba(0,0,0,0.2)] transition-all duration-300 ease-in-out mb-8 w-full mx-0 hover:border-[rgba(255,255,255,0.2)] hover:shadow-[0_12px_40px_rgba(0,0,0,0.3)]">
+          <div
+            style={{
+              background: "linear-gradient(135deg, rgba(16, 28, 54, 0.45) 0%, rgba(10, 18, 36, 0.55) 100%)",
+              border: "1px solid rgba(87, 241, 219, 0.12)",
+              borderRadius: "24px",
+              backdropFilter: "blur(24px)",
+              boxShadow: "0 20px 40px rgba(0, 0, 0, 0.4)"
+            }}
+            className="overflow-hidden transition-all duration-300 hover:border-teal-500/25 mb-8 w-full mx-0"
+          >
             <div
-              className="flex justify-between items-center py-6 px-0 bg-[rgba(255,255,255,0.05)] border-b border-[rgba(255,255,255,0.1)] flex-wrap gap-4 max-md:flex-col max-md:items-stretch max-md:p-4 max-md:py-4"
-              style={{ paddingRight: "1rem", paddingLeft: "1rem" }}
+              className="flex justify-between items-center py-5 px-6 bg-slate-900/30 border-b border-[rgba(255,255,255,0.06)] flex-wrap gap-4 max-md:flex-col max-md:items-stretch"
             >
-              <h4 className="text-2xl font-semibold text-white m-0 [text-shadow:0_2px_4px_rgba(0,0,0,0.3)] max-sm:text-xl">
+              <h4 className="text-xl font-bold text-white m-0 [text-shadow:0_2px_4px_rgba(0,0,0,0.3)] max-sm:text-lg">
                 {selectedItem === "all" 
                   ? `All ${viewMode === "class" ? "Classes" : "Teachers"}` 
                   : `${viewMode === "class" ? "Class" : "Teacher"}: ${selectedItem}`
                 }
               </h4>
-              <div className="flex gap-4 flex-wrap max-md:justify-center max-sm:flex-col max-sm:gap-2">
+              <div className="flex gap-2 flex-wrap max-md:justify-center items-center">
+                {/* Time config */}
+                <div className="flex items-center gap-2 py-1.5 px-3 rounded-full border border-slate-700/60 bg-slate-900/40 text-xs text-slate-400">
+                  <Clock size={12} />
+                  <input
+                    type="time"
+                    value={startTime}
+                    onChange={e => setStartTime(e.target.value)}
+                    className="bg-transparent border-none outline-none text-slate-300 text-xs w-[70px] cursor-pointer"
+                    title="First period start time"
+                  />
+                  <span className="text-slate-600">·</span>
+                  <input
+                    type="number"
+                    value={periodDuration}
+                    onChange={e => setPeriodDuration(Math.max(15, Math.min(120, parseInt(e.target.value) || 50)))}
+                    className="bg-transparent border-none outline-none text-slate-300 text-xs w-[30px] text-center cursor-pointer"
+                    title="Period duration (minutes)"
+                    min={15} max={120}
+                  />
+                  <span className="text-slate-600">min</span>
+                </div>
+
                 <button
-                  className="flex items-center gap-2 py-3 px-6 border-none rounded-xl text-[0.9rem] font-medium cursor-pointer transition-all duration-300 ease-in-out color-white relative overflow-hidden focus:outline-[#3282b8] focus:outline-2 focus:outline-offset-2 before:content-[''] before:absolute before:top-0 before:left-[-100%] before:w-full before:h-full before:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent)] before:transition-[left] before:duration-500 before:ease-in-out hover:before:left-full max-md:flex-1 max-md:justify-center bg-[linear-gradient(135deg,#10b981_0%,#059669_100%)] hover:bg-[linear-gradient(135deg,#059669_0%,#047857_100%)] hover:-translate-y-[2px] hover:shadow-[0_6px_20px_rgba(16,185,129,0.4)]"
+                  className="flex items-center gap-2 py-2.5 px-5 border border-teal-500/30 hover:border-teal-500 rounded-full text-xs font-bold cursor-pointer transition-all duration-300 ease-in-out text-[#57f1db] bg-teal-500/5 hover:bg-teal-500/10 hover:-translate-y-[1px] disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ borderRadius: "9999px" }}
                   onClick={exportAsPDF}
+                  disabled={exportingPDF}
                 >
-                  <span className="text-[1.1rem]">📄</span>
-                  Export as PDF
+                  {exportingPDF ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                  {exportingPDF ? "Generating…" : "Export PDF"}
                 </button>
                 <button
-                  className="flex items-center gap-2 py-3 px-6 border-none rounded-xl text-[0.9rem] font-medium cursor-pointer transition-all duration-300 ease-in-out color-white relative overflow-hidden focus:outline-[#3282b8] focus:outline-2 focus:outline-offset-2 before:content-[''] before:absolute before:top-0 before:left-[-100%] before:w-full before:h-full before:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent)] before:transition-[left] before:duration-500 before:ease-in-out hover:before:left-full max-md:flex-1 max-md:justify-center bg-[linear-gradient(135deg,#f59e0b_0%,#d97706_100%)] hover:bg-[linear-gradient(135deg,#d97706_0%,#b45309_100%)] hover:-translate-y-[2px] hover:shadow-[0_6px_20px_rgba(245,158,11,0.4)]"
+                  className="flex items-center gap-2 py-2.5 px-5 border border-purple-500/30 hover:border-purple-500 rounded-full text-xs font-bold cursor-pointer transition-all duration-300 ease-in-out text-[#a78bfa] bg-purple-500/5 hover:bg-purple-500/10 hover:-translate-y-[1px] disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ borderRadius: "9999px" }}
                   onClick={exportAsExcel}
+                  disabled={exportingExcel}
                 >
-                  <span className="text-[1.1rem]">📊</span>
-                  Export as Excel
+                  {exportingExcel ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                  {exportingExcel ? "Generating…" : "Export Excel"}
+                </button>
+                <button
+                  className="flex items-center gap-2 py-2.5 px-5 border border-blue-500/30 hover:border-blue-500 rounded-full text-xs font-bold cursor-pointer transition-all duration-300 ease-in-out text-[#60a5fa] bg-blue-500/5 hover:bg-blue-500/10 hover:-translate-y-[1px]"
+                  style={{ borderRadius: "9999px" }}
+                  onClick={exportAsICS}
+                >
+                  <Download size={14} />
+                  Export iCal
+                </button>
+                <button
+                  className="flex items-center gap-2 py-2.5 px-4 border border-slate-700/40 hover:border-slate-500 rounded-full text-xs font-bold cursor-pointer transition-all duration-300 ease-in-out text-slate-400 hover:text-slate-200 bg-slate-800/20 hover:bg-slate-700/30 hover:-translate-y-[1px]"
+                  style={{ borderRadius: "9999px" }}
+                  onClick={() => window.print()}
+                  title="Print timetable"
+                >
+                  <Printer size={14} />
+                  Print
                 </button>
               </div>
             </div>
-            <div className="py-8 px-0 max-sm:py-4" id="timetable-container">
+            <div className="py-6 px-4 max-sm:py-4" id="timetable-container">
               {selectedItem === "all" 
                 ? renderAllTimetables() 
                 : renderTimetable(currentData[selectedItem])
@@ -655,6 +972,61 @@ const TimetableDisplay = ({
             </div>
           </div>
         </div>
+
+        {/* Teacher Workload Summary */}
+        {teacherTimetable && Object.keys(teacherTimetable).length > 0 && (() => {
+          const workloads = computeWorkloads();
+          return (
+            <div style={{
+              background: "rgba(10, 18, 36, 0.45)",
+              border: "1px solid rgba(87, 241, 219, 0.12)",
+              borderRadius: "24px",
+              backdropFilter: "blur(24px)",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.4)",
+              padding: "24px",
+              marginBottom: "32px",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
+                <Users size={18} style={{ color: "#57f1db" }} />
+                <h4 style={{ margin: 0, fontSize: "16px", fontWeight: 800, color: "#fff" }}>Teacher Workload Summary</h4>
+                <span style={{ marginLeft: "auto", fontSize: "11px", color: "#64748b", fontWeight: 600 }}>
+                  {workloads.length} teachers
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "12px" }}>
+                {workloads.map(({ name, assigned, total, maxPeriods }) => {
+                  const cap = maxPeriods ?? total;
+                  const pct = cap > 0 ? Math.min(100, Math.round((assigned / cap) * 100)) : 0;
+                  const isOver = maxPeriods !== null && assigned > maxPeriods;
+                  const barColor = isOver ? "#ef4444" : pct >= 80 ? "#f59e0b" : "#57f1db";
+                  return (
+                    <div key={name} style={{
+                      background: "rgba(255,255,255,0.03)",
+                      border: `1px solid ${barColor}22`,
+                      borderRadius: "14px",
+                      padding: "14px 16px",
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                        <span style={{ fontSize: "13px", fontWeight: 700, color: "#e2e8f0", maxWidth: "65%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={name}>{name}</span>
+                        <span style={{ fontSize: "12px", fontWeight: 700, color: barColor }}>
+                          {assigned}{maxPeriods !== null ? `/${maxPeriods}` : ""} periods
+                        </span>
+                      </div>
+                      <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: "999px", height: "6px", overflow: "hidden" }}>
+                        <div style={{ width: `${pct}%`, height: "100%", background: barColor, borderRadius: "999px", transition: "width 0.6s ease" }} />
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: "6px" }}>
+                        <span style={{ fontSize: "10px", color: "#64748b" }}>{pct}% utilised</span>
+                        {isOver && <span style={{ fontSize: "10px", color: "#ef4444", fontWeight: 700 }}>⚠ Over limit</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
       </div>
     </div>
   );

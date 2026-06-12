@@ -5,7 +5,8 @@ import { useNavigate } from "react-router";
 import { useSignIn } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import { Loader,Eye, EyeOff } from "lucide-react";
-import "../../../styles/theme.css";
+import BorderGlow from "../components/BorderGlow";
+import SideRays from "../components/SideRays";
 
 function LoginPage() {
   const [email, setEmail] = useState("");
@@ -115,126 +116,166 @@ function LoginPage() {
   }
 
   return (
-    <div className="vh-100 dark-gradient-bg" style={{ width: "100%", position: "relative" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "radial-gradient(ellipse 100% 60% at 15% 10%, #081225 0%, #030814 60%, #02050b 100%)",
+        color: "#d4e4fa",
+        fontFamily: "'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif",
+        overflowX: "hidden",
+        position: "relative",
+      }}
+    >
+      <div style={{ position: "absolute", top: 0, right: 0, width: "100%", height: "100%", overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
+        <SideRays
+          speed={1.0}
+          rayColor1="#57f1db"
+          rayColor2="#7c3aed"
+          intensity={1.2}
+          spread={2.0}
+          origin="top-right"
+          tilt={-10}
+          saturation={1.5}
+          blend={0.65}
+          falloff={1.5}
+          opacity={0.35}
+        />
+      </div>
+
       <DotGrid
-        dotSize={10}
-        gap={15}
-        baseColor="#000000"
-        activeColor="#3282b8"
-        proximity={140}
-        shockRadius={250}
-        shockStrength={5}
-        resistance={750}
-        returnDuration={1.5}
+        dotSize={8}
+        gap={16}
+        baseColor="rgba(255,255,255,0.02)"
+        activeColor="#57f1db"
+        proximity={120}
+        shockRadius={200}
+        shockStrength={4}
+        resistance={800}
+        returnDuration={1.2}
       >
-        <div className="d-flex vh-100 justify-content-center px-3 align-items-center">
-          <div className="auth-container rounded-3 p-4" style={{ minWidth: "280px", width: "100%", maxWidth: "400px" }}>
-            <h3 className="text-center pt-3 pb-2 auth-title">Log In</h3>
-            <div className="d-flex flex-column p-2 w-100 gap-3 justify-content-center align-items-center ">
-              {resetStep === 0 && (
-                <>
-                  <InputField
-                    value={email}
-                    type="text"
-                    placeholder="Enter Email"
-                    handleFunction={(e) => setEmail(e.target.value)}
-                  />
-                  <div className="w-100 position-relative">
+        <div className="d-flex vh-100 justify-content-center px-3 align-items-center" style={{ position: "relative", zIndex: 1 }}>
+          <BorderGlow
+            borderRadius={24}
+            backgroundColor="rgba(10, 18, 36, 0.55)"
+            glowColor="170 80 50"
+            className="auth-container"
+            style={{
+              minWidth: "280px",
+              width: "100%",
+              maxWidth: "400px",
+              backdropFilter: "blur(24px)",
+              border: "1px solid rgba(87, 241, 219, 0.15)",
+              boxShadow: "0 40px 80px rgba(0, 0, 0, 0.65)",
+            }}
+          >
+            <div style={{ padding: 24, width: "100%", height: "100%" }}>
+              <h3 className="text-center pt-3 pb-2 auth-title" style={{ background: "linear-gradient(90deg,#57f1db,#a78bfa)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", fontWeight: 850 }}>Log In</h3>
+              <div className="d-flex flex-column p-2 w-100 gap-3 justify-content-center align-items-center ">
+                {resetStep === 0 && (
+                  <>
                     <InputField
-                      value={password}
-                      type={isPasswordVisible ? "text" : "password"}
-                      placeholder="Enter Password"
-                      handleFunction={(e) => setPassword(e.target.value)}
+                      value={email}
+                      type="text"
+                      placeholder="Enter Email"
+                      handleFunction={(e) => setEmail(e.target.value)}
                     />
-                    <div
-                      className="position-absolute"
-                      style={{ top: "50%", right: "10px", transform: "translateY(-50%)", cursor: "pointer" }}
-                      onClick={() => setIsPasswordVisible(!isPasswordVisible)}
-                    >
-                      {isPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                    <div className="w-100 position-relative">
+                      <InputField
+                        value={password}
+                        type={isPasswordVisible ? "text" : "password"}
+                        placeholder="Enter Password"
+                        handleFunction={(e) => setPassword(e.target.value)}
+                      />
+                      <div
+                        className="position-absolute"
+                        style={{ top: "50%", right: "10px", transform: "translateY(-50%)", cursor: "pointer" }}
+                        onClick={() => setIsPasswordVisible(!isPasswordVisible)}
+                      >
+                        {isPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </div>
                     </div>
-                  </div>
-                  <button
-                    className="auth-button d-flex justify-content-center align-items-center p-2 rounded w-100"
-                    style={{ height: "38px", padding: "0 16px" }}
-                    onClick={handleSignInWithEmail}
-                  >
-                    <p className="mb-0">Login</p>
-                  </button>
-                  <p
-                    className="mb-0 hover-underline"
-                    style={{ cursor: "pointer" }}
-                    onClick={handleSendResetCode}
-                  >
-                    Forgot Password?
-                  </p>
-                </>
-              )}
+                    <button
+                      className="auth-button d-flex justify-content-center align-items-center p-2 rounded w-100"
+                      style={{ height: "38px", padding: "0 16px" }}
+                      onClick={handleSignInWithEmail}
+                    >
+                      <p className="mb-0">Login</p>
+                    </button>
+                    <p
+                      className="mb-0 hover-underline"
+                      style={{ cursor: "pointer" }}
+                      onClick={handleSendResetCode}
+                    >
+                      Forgot Password?
+                    </p>
+                  </>
+                )}
 
-              {resetStep === 1 && (
-                <>
-                  <InputField
-                    value={resetCode}
-                    type="text"
-                    placeholder="Enter Reset Code"
-                    handleFunction={(e) => setResetCode(e.target.value)}
-                  />
-                  <div className="w-100 position-relative">
+                {resetStep === 1 && (
+                  <>
                     <InputField
-                      value={newPassword}
-                      type={isNewPasswordVisible ? "text" : "password"}
-                      placeholder="Enter New Password"
-                      handleFunction={(e) => setNewPassword(e.target.value)}
+                      value={resetCode}
+                      type="text"
+                      placeholder="Enter Reset Code"
+                      handleFunction={(e) => setResetCode(e.target.value)}
                     />
-                    <div
-                      className="position-absolute"
-                      style={{ top: "50%", right: "10px", transform: "translateY(-50%)", cursor: "pointer" }}
-                      onClick={() => setIsNewPasswordVisible(!isNewPasswordVisible)}
-                    >
-                      {isNewPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                    <div className="w-100 position-relative">
+                      <InputField
+                        value={newPassword}
+                        type={isNewPasswordVisible ? "text" : "password"}
+                        placeholder="Enter New Password"
+                        handleFunction={(e) => setNewPassword(e.target.value)}
+                      />
+                      <div
+                        className="position-absolute"
+                        style={{ top: "50%", right: "10px", transform: "translateY(-50%)", cursor: "pointer" }}
+                        onClick={() => setIsNewPasswordVisible(!isNewPasswordVisible)}
+                      >
+                        {isNewPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </div>
                     </div>
-                  </div>
-                 <div className="w-100 position-relative">
-                    <InputField
-                      value={newConfirmPassword}
-                      type={isConfirmNewPasswordVisible ? "text" : "password"}
-                      placeholder="Enter Password"
-                      handleFunction={(e) => setNewConfirmPassword(e.target.value)}
-                    />
-                    <div
-                      className="position-absolute"
-                      style={{ top: "50%", right: "10px", transform: "translateY(-50%)", cursor: "pointer" }}
-                      onClick={() => setIsConfirmNewPasswordVisible(!isConfirmNewPasswordVisible)}
-                    >
-                      {isConfirmNewPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                   <div className="w-100 position-relative">
+                      <InputField
+                        value={newConfirmPassword}
+                        type={isConfirmNewPasswordVisible ? "text" : "password"}
+                        placeholder="Enter Password"
+                        handleFunction={(e) => setNewConfirmPassword(e.target.value)}
+                      />
+                      <div
+                        className="position-absolute"
+                        style={{ top: "50%", right: "10px", transform: "translateY(-50%)", cursor: "pointer" }}
+                        onClick={() => setIsConfirmNewPasswordVisible(!isConfirmNewPasswordVisible)}
+                      >
+                        {isConfirmNewPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </div>
                     </div>
-                  </div>
-                  
-                  <button
-                    className="auth-button d-flex justify-content-center align-items-center p-2 rounded w-100"
-                    style={{ height: "38px", padding: "0 16px" }}
-                    onClick={handleResetPassword}
-                  >
-                    <p className="mb-0">Reset Password</p>
-                  </button>
-                </>
-              )}
+                    
+                    <button
+                      className="auth-button d-flex justify-content-center align-items-center p-2 rounded w-100"
+                      style={{ height: "38px", padding: "0 16px" }}
+                      onClick={handleResetPassword}
+                    >
+                      <p className="mb-0">Reset Password</p>
+                    </button>
+                  </>
+                )}
 
-              <p className="mb-0">or</p>
-              <div
-                className="google-auth-button rounded-5 p-2 px-3 justify-content-center align-items-center d-flex gap-2"
-                style={{ cursor: "pointer" }}
-                onClick={handleSignInWithGoogle}
-              >
-                <p className="mb-0">Continue with Google</p>
-                <img src="./google.png" className="rounded-pill" style={{ width: "30px", height: "30px" }} />
-              </div>
-              <div className="d-flex gap-2">
-                <p className="mb-0">Don't have an account?</p>
-                <p className="auth-link mb-0" onClick={() => navigate("/sign-up")}>Sign up</p>
+                <p className="mb-0">or</p>
+                <div
+                  className="google-auth-button rounded-5 p-2 px-3 justify-content-center align-items-center d-flex gap-2"
+                  style={{ cursor: "pointer" }}
+                  onClick={handleSignInWithGoogle}
+                >
+                  <p className="mb-0">Continue with Google</p>
+                  <img src="./google.png" className="rounded-pill" style={{ width: "30px", height: "30px" }} />
+                </div>
+                <div className="d-flex gap-2">
+                  <p className="mb-0">Don't have an account?</p>
+                  <p className="auth-link mb-0" onClick={() => navigate("/sign-up")}>Sign up</p>
+                </div>
               </div>
             </div>
-          </div>
+          </BorderGlow>
         </div>
       </DotGrid>
     </div>

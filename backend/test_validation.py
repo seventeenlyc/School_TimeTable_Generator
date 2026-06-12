@@ -133,5 +133,66 @@ class TestEditValidation(unittest.TestCase):
         self.assertFalse(res["valid"])
         self.assertTrue(any("must be scheduled consecutively" in err for err in res["errors"]))
 
+    def test_validate_edit_teacher_unavailability(self):
+        req = EditValidationRequest(
+            class_timetable={
+                "10A": [["Math(Mr. Jones)", "Free"]]
+            },
+            teacher_timetable={
+                "Mr. Jones": [["Math - 10A", "Free"]]
+            },
+            workingDays=1,
+            periods=2,
+            classes=["10A"],
+            subjects=["Math"],
+            teachers=[
+                TeacherInput(
+                    name="Mr. Jones",
+                    subjects=["Math"],
+                    mainSubject="Math",
+                    periods=[TeacherPeriod(class_name="10A", subject="Math", noOfPeriods=1)],
+                    unavailable_slots=[[0, 0]]
+                )
+            ]
+        )
+        res = self.run_async(validate_edit(req))
+        self.assertFalse(res["valid"])
+        self.assertTrue(any("marked as unavailable" in err for err in res["errors"]))
+
+    def test_validate_edit_lab_room_double_booking(self):
+        req = EditValidationRequest(
+            class_timetable={
+                "10A": [["CS Lab(Mr. Jones)", "Free"]],
+                "10B": [["CS Lab(Mrs. Smith)", "Free"]]
+            },
+            teacher_timetable={
+                "Mr. Jones": [["CS Lab - 10A", "Free"]],
+                "Mrs. Smith": [["CS Lab - 10B", "Free"]]
+            },
+            workingDays=1,
+            periods=2,
+            classes=["10A", "10B"],
+            subjects=["CS Lab"],
+            teachers=[
+                TeacherInput(
+                    name="Mr. Jones",
+                    subjects=["CS Lab"],
+                    mainSubject="CS Lab",
+                    labPeriod="CS Lab",
+                    periods=[TeacherPeriod(class_name="10A", subject="CS Lab", noOfPeriods=1)]
+                ),
+                TeacherInput(
+                    name="Mrs. Smith",
+                    subjects=["CS Lab"],
+                    mainSubject="CS Lab",
+                    labPeriod="CS Lab",
+                    periods=[TeacherPeriod(class_name="10B", subject="CS Lab", noOfPeriods=1)]
+                )
+            ]
+        )
+        res = self.run_async(validate_edit(req))
+        self.assertFalse(res["valid"])
+        self.assertTrue(any("Specialized Lab Room for 'CS Lab' is double-booked" in err for err in res["errors"]))
+
 if __name__ == '__main__':
     unittest.main()

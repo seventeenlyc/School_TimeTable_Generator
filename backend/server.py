@@ -56,6 +56,7 @@ class TeacherInput(BaseModel):
     labPeriod: Optional[str] = None
     assigned_class: Optional[str] = None
     periods: List[TeacherPeriod]
+    unavailable_slots: Optional[List[List[int]]] = []  # List of [dayIndex, periodIndex]
 
 class TimetableRequest(BaseModel):
     workingDays: int
@@ -65,6 +66,8 @@ class TimetableRequest(BaseModel):
     teachers: List[TeacherInput]
     userId : str 
     title : Optional[str] = None
+    versionName: Optional[str] = "v1"
+    parentGroupId: Optional[str] = None
 
 class EditValidationRequest(BaseModel):
     class_timetable: Dict[str, List[List[str]]]
@@ -100,7 +103,8 @@ async def generate_timetable(request: TimetableRequest):
                 subjects_by_class=subjects_by_class,
                 main_subject=teacher.mainSubject,
                 assigned_class=teacher.assigned_class if teacher.assigned_class != "Select Class" else None,
-                lab_subjects=lab_subjects
+                lab_subjects=lab_subjects,
+                unavailable_slots=teacher.unavailable_slots or []
             )
             input_teachers.append(input_teacher)
         
@@ -130,6 +134,8 @@ async def generate_timetable(request: TimetableRequest):
             "status": "FEASIBLE",
             "userId": request.userId,
             "title": request.title,
+            "versionName": request.versionName or "v1",
+            "parentGroupId": request.parentGroupId,
             "teacherData": request.teachers,
             "classes": request.classes,
             "subjects": request.subjects,
@@ -211,9 +217,23 @@ def get_timetables(user_id: str):
 async def update_timetable(timetable_id: str, request:Request):
     data = await request.json()
     india = timezone("Asia/Kolkata")
+    
+    update_fields = {
+        "class_timetable": data["class_timetable"],
+        "teacher_timetable": data["teacher_timetable"],
+        "createdAt": datetime.now(india).isoformat(),
+        "teacherData": data["teacherData"]
+    }
+    if "versionName" in data:
+        update_fields["versionName"] = data["versionName"]
+    if "parentGroupId" in data:
+        update_fields["parentGroupId"] = data["parentGroupId"]
+    if "title" in data:
+        update_fields["title"] = data["title"]
+        
     updated_doc = collection.find_one_and_update(
         {"_id": ObjectId(timetable_id)},
-        {"$set": {"class_timetable": data["class_timetable"],"teacher_timetable":data["teacher_timetable"],"createdAt":datetime.now(india).isoformat(),"teacherData":data["teacherData"]}},
+        {"$set": update_fields},
         return_document=pymongo.ReturnDocument.AFTER
     )
     updated_doc["_id"] = str(updated_doc["_id"])  
@@ -238,9 +258,10 @@ async def validate_edit(request: EditValidationRequest):
     classes = request.classes
     teachers_input = request.teachers
     
-    # 1. Map teachers to their lab subjects and class teacher assignments
+    # 1. Map teachers to their lab subjects, class teacher assignments, and availability slots
     teacher_labs = {}
     class_teachers = {}  # class -> (teacher_name, main_subject)
+    teacher_unavailability = {} # teacher_name -> list of [d, p]
     
     for t in teachers_input:
         lab_subjects = []
@@ -251,7 +272,31 @@ async def validate_edit(request: EditValidationRequest):
         if t.assigned_class and t.assigned_class != "Select Class":
             class_teachers[t.assigned_class] = (t.name, t.mainSubject)
             
-    # 2. Check for teacher double-booking (double allocation in the same period)
+        teacher_unavailability[t.name] = t.unavailable_slots or []
+            
+    # 2. Check for teacher unavailability slots (NEW)
+    for d in range(working_days):
+        for p in range(periods_per_day):
+            for cls in classes:
+                if cls not in class_tt:
+                    continue
+                if d >= len(class_tt[cls]) or p >= len(class_tt[cls][d]):
+                    continue
+                entry = class_tt[cls][d][p]
+                if entry and entry != "Free":
+                    if "(" in entry and ")" in entry:
+                        tname = entry.split("(")[1].split(")")[0]
+                        if tname in teacher_unavailability:
+                            slots = teacher_unavailability[tname]
+                            if [d, p] in slots:
+                                day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                                day_str = day_names[d] if d < len(day_names) else f"Day {d+1}"
+                                errors.append(
+                                    f"Teacher '{tname}' is scheduled in Class {cls} on {day_str}, Period {p+1}, "
+                                    f"but is marked as unavailable during this slot."
+                                )
+
+    # 3. Check for teacher double-booking (double allocation in the same period)
     for d in range(working_days):
         for p in range(periods_per_day):
             teacher_slots = defaultdict(list)  # teacher_name -> list of classes
@@ -274,7 +319,7 @@ async def validate_edit(request: EditValidationRequest):
                         f"for classes: {', '.join(classes_assigned)}."
                     )
                     
-    # 3. Check for Daily Subject Cap (max 2 periods of a subject per day in a class)
+    # 4. Check for Daily Subject Cap (max 2 periods of a subject per day in a class)
     for cls in classes:
         if cls not in class_tt:
             continue
@@ -298,7 +343,7 @@ async def validate_edit(request: EditValidationRequest):
                         f"Maximum allowed is 2 periods per day."
                     )
                     
-    # 4. Check for Lab consecutive block integrity
+    # 5. Check for Lab consecutive block integrity
     for cls in classes:
         if cls not in class_tt:
             continue
@@ -323,8 +368,34 @@ async def validate_edit(request: EditValidationRequest):
                                 f"Lab subject '{subject}' (Teacher: {tname}) in Class {cls} on Day {d+1}, "
                                 f"Period {p+1} must be scheduled consecutively in a double period block."
                             )
+
+    # 6. Check for Lab room double-booking (NEW)
+    for d in range(working_days):
+        for p in range(periods_per_day):
+            lab_occupations = defaultdict(list)
+            for cls in classes:
+                if cls not in class_tt:
+                    continue
+                if d >= len(class_tt[cls]) or p >= len(class_tt[cls][d]):
+                    continue
+                entry = class_tt[cls][d][p]
+                if entry and entry != "Free" and "(" in entry:
+                    subject = entry.split("(")[0]
+                    tname = entry.split("(")[1].split(")")[0]
+                    
+                    if tname in teacher_labs and subject in teacher_labs[tname]:
+                        lab_occupations[subject].append(cls)
+            
+            for lab_sub, classes_occupying in lab_occupations.items():
+                if len(classes_occupying) > 1:
+                    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                    day_str = day_names[d] if d < len(day_names) else f"Day {d+1}"
+                    errors.append(
+                        f"Specialized Lab Room for '{lab_sub}' is double-booked on {day_str}, Period {p+1} "
+                        f"by classes: {', '.join(classes_occupying)}."
+                    )
                             
-    # 5. Class Teacher Main Subject First Period Warning (Soft Constraint)
+    # 7. Class Teacher Main Subject First Period Warning (Soft Constraint)
     for cls, (tname, main_subject) in class_teachers.items():
         if cls not in class_tt:
             continue

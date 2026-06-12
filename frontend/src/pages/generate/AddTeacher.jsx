@@ -1,12 +1,212 @@
 import { useState, useEffect } from "react";
-import { Plus, Loader2, X, Save, AlertTriangle, RefreshCw, Users, Edit3 } from "lucide-react";
+import { Plus, Loader2, X, Save, AlertTriangle, RefreshCw, Users, Edit3, Search } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
+import WizardSteps from "../components/WizardSteps";
 import { useAuth, useUser } from "@clerk/clerk-react";
 import DropdownChecklist from "./components/DropdownChecklist";
 import TimetableDisplay from "./TimetableDisplay";
-import EditTimetable from "./components/EditTimetable";
 import { fetchWithAuth } from "../../utils/fetchWithAuth";
 import toast from "react-hot-toast";
+
+function FloatingOrbs() {
+  return (
+    <div className="fixed inset-0 w-full h-full pointer-events-none z-0 overflow-hidden" aria-hidden="true">
+      <div className="absolute top-[8%] left-[3%] w-[550px] h-[550px] rounded-full opacity-[0.06]"
+        style={{ background: "radial-gradient(circle, #57f1db 0%, transparent 70%)", filter: "blur(95px)" }} />
+      <div className="absolute bottom-[10%] right-[2%] w-[680px] h-[680px] rounded-full opacity-[0.05]"
+        style={{ background: "radial-gradient(circle, #7c3aed 0%, transparent 70%)", filter: "blur(115px)" }} />
+    </div>
+  );
+}
+
+const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+const DIAG_TYPES = [
+  {
+    key: "double_book",
+    test: (s) => /is double-booked/i.test(s),
+    icon: "👥",
+    label: "Teacher Double-Booking",
+    bg: "rgba(239,68,68,0.08)",
+    border: "#ef4444",
+    badge: "#ef4444",
+    text: "#fca5a5",
+  },
+  {
+    key: "unavailable",
+    test: (s) => /was scheduled on blocked slot/i.test(s),
+    icon: "🚫",
+    label: "Unavailability Violation",
+    bg: "rgba(249,115,22,0.08)",
+    border: "#f97316",
+    badge: "#f97316",
+    text: "#fdba74",
+  },
+  {
+    key: "lab_room",
+    test: (s) => /Specialized Lab Room.*double-booked/i.test(s),
+    icon: "🧪",
+    label: "Lab Room Conflict",
+    bg: "rgba(124,58,237,0.08)",
+    border: "#7c3aed",
+    badge: "#7c3aed",
+    text: "#c4b5fd",
+  },
+  {
+    key: "lab_consec",
+    test: (s) => /not scheduled consecutively/i.test(s),
+    icon: "🔗",
+    label: "Lab Consecutive Block",
+    bg: "rgba(56,189,248,0.08)",
+    border: "#38bdf8",
+    badge: "#38bdf8",
+    text: "#7dd3fc",
+  },
+  {
+    key: "period_shortage",
+    test: (s) => /has only \d+ periods assigned.*requires/i.test(s),
+    icon: "📊",
+    label: "Period Count Shortage",
+    bg: "rgba(234,179,8,0.08)",
+    border: "#eab308",
+    badge: "#eab308",
+    text: "#fde047",
+  },
+  {
+    key: "daily_limit",
+    test: (s) => /exceeding the daily limit/i.test(s),
+    icon: "⚠️",
+    label: "Daily Subject Limit",
+    bg: "rgba(245,158,11,0.08)",
+    border: "#f59e0b",
+    badge: "#f59e0b",
+    text: "#fcd34d",
+  },
+  {
+    key: "class_teacher",
+    test: (s) => /Class Teacher.*not assigned the first period/i.test(s),
+    icon: "🎓",
+    label: "Class Teacher Priority",
+    bg: "rgba(20,184,166,0.08)",
+    border: "#14b8a6",
+    badge: "#14b8a6",
+    text: "#5eead4",
+  },
+];
+
+function classifyDiagnostic(msg) {
+  return DIAG_TYPES.find((t) => t.test(msg)) || {
+    key: "other",
+    icon: "ℹ️",
+    label: "Constraint Violation",
+    bg: "rgba(100,116,139,0.08)",
+    border: "#64748b",
+    badge: "#64748b",
+    text: "#94a3b8",
+  };
+}
+
+function DiagnosticsPanel({ errorDetails }) {
+  const details = errorDetails.error_details;
+  if (!details) return null;
+
+  if (typeof details === "string") {
+    return (
+      <div style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "12px", padding: "14px 16px" }}>
+        <p style={{ color: "#fca5a5", fontSize: "13px", margin: 0 }}>{details}</p>
+      </div>
+    );
+  }
+
+  const conflictDiagnostics = details.conflict_diagnostics || [];
+  const constraintErrors = details.constraint_errors || [];
+  const otherEntries = Object.entries(details).filter(
+    ([k]) => k !== "conflict_diagnostics" && k !== "constraint_errors"
+  );
+
+  // Group conflict diagnostics by type
+  const groups = {};
+  conflictDiagnostics.forEach((msg) => {
+    const type = classifyDiagnostic(msg);
+    if (!groups[type.key]) groups[type.key] = { type, items: [] };
+    groups[type.key].items.push(msg);
+  });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      {/* Conflict Diagnostics structured panel */}
+      {conflictDiagnostics.length > 0 && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+            <span style={{ fontSize: "13px", fontWeight: 800, color: "#f87171", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+              Conflict Diagnostics
+            </span>
+            <span style={{ background: "#ef4444", color: "#fff", fontSize: "10px", fontWeight: 700, borderRadius: "999px", padding: "1px 8px" }}>
+              {conflictDiagnostics.length}
+            </span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {Object.values(groups).map(({ type, items }) => (
+              <div
+                key={type.key}
+                style={{
+                  background: type.bg,
+                  border: `1px solid ${type.border}40`,
+                  borderLeft: `3px solid ${type.border}`,
+                  borderRadius: "10px",
+                  padding: "10px 14px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: items.length > 1 ? "8px" : "4px" }}>
+                  <span style={{ fontSize: "15px" }}>{type.icon}</span>
+                  <span style={{ fontSize: "11px", fontWeight: 700, color: type.badge, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    {type.label}
+                  </span>
+                  {items.length > 1 && (
+                    <span style={{ background: type.badge + "22", color: type.badge, fontSize: "10px", fontWeight: 700, borderRadius: "999px", padding: "1px 7px", marginLeft: "auto" }}>
+                      ×{items.length}
+                    </span>
+                  )}
+                </div>
+                <ul style={{ margin: 0, padding: "0 0 0 22px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {items.map((msg, i) => (
+                    <li key={i} style={{ fontSize: "12px", color: type.text, lineHeight: 1.5 }}>{msg}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Constraint errors */}
+      {constraintErrors.length > 0 && (
+        <div>
+          <p style={{ fontSize: "11px", fontWeight: 700, color: "#f87171", textTransform: "uppercase", letterSpacing: "0.04em", margin: "0 0 8px 0" }}>
+            Constraint Errors
+          </p>
+          <ul style={{ margin: 0, padding: "0 0 0 18px", display: "flex", flexDirection: "column", gap: "4px" }}>
+            {constraintErrors.map((e, i) => (
+              <li key={i} style={{ fontSize: "12px", color: "#fca5a5" }}>{e.message || JSON.stringify(e)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Other fields */}
+      {otherEntries.length > 0 && (
+        <ul style={{ margin: 0, padding: "0 0 0 18px", display: "flex", flexDirection: "column", gap: "4px" }}>
+          {otherEntries.map(([key, value]) => (
+            <li key={key} style={{ fontSize: "12px", color: "#94a3b8" }}>
+              <strong style={{ color: "#cbd5e1", textTransform: "capitalize" }}>{key.replace(/_/g, " ")}:</strong>{" "}
+              {Array.isArray(value) ? value.join(", ") : typeof value === "object" ? JSON.stringify(value) : String(value)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function AddTeacher() {
   const navigate = useNavigate();
@@ -17,6 +217,34 @@ function AddTeacher() {
   const [error, setError] = useState("");
   const [errorDetails, setErrorDetails] = useState(null);
   const [assignedClasses, setAssignedClasses] = useState([]);
+
+  const handleToggleSlot = (teacherIndex, dayIndex, periodIndex) => {
+    const newTeachers = [...teachers];
+    const currentTeacher = newTeachers[teacherIndex];
+    if (!currentTeacher.unavailable_slots) {
+      currentTeacher.unavailable_slots = [];
+    }
+    
+    const slotIndex = currentTeacher.unavailable_slots.findIndex(
+      (slot) => slot[0] === dayIndex && slot[1] === periodIndex
+    );
+    
+    if (slotIndex > -1) {
+      currentTeacher.unavailable_slots = currentTeacher.unavailable_slots.filter(
+        (_, i) => i !== slotIndex
+      );
+    } else {
+      currentTeacher.unavailable_slots.push([dayIndex, periodIndex]);
+    }
+    setTeachers(newTeachers);
+  };
+
+  const isSlotBlocked = (teacher, dayIndex, periodIndex) => {
+    if (!teacher || !teacher.unavailable_slots) return false;
+    return teacher.unavailable_slots.some(
+      (slot) => slot[0] === dayIndex && slot[1] === periodIndex
+    );
+  };
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -34,7 +262,10 @@ function AddTeacher() {
 
   const [teachers, setTeachers] = useState(() => {
     if (teacherData) {
-      return teacherData;
+      return teacherData.map(t => ({
+        ...t,
+        unavailable_slots: t.unavailable_slots || []
+      }));
     }
     return [
       {
@@ -44,6 +275,7 @@ function AddTeacher() {
         mainSubject: "",
         labPeriod: "",
         periods: [{ class_name: "", subject: "", noOfPeriods: "" }],
+        unavailable_slots: [],
       },
     ];
   });
@@ -54,27 +286,38 @@ function AddTeacher() {
   // Store the teachers data when timetable is generated
   const [savedTeachersData, setSavedTeachersData] = useState(null);
 
-  
+  // Active teacher index for the sidebar directory workspace view
+  const [activeTeacherIndex, setActiveTeacherIndex] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Component functions remain the same until generateTimetable...
   const handleAddTeacher = () => {
-    setTeachers([
+    const newTeachers = [
       ...teachers,
       {
         name: "",
         assigned_class: "",
         mainSubject: "",
         labPeriod: "",
-        periods: [{ _name: "", subject: "", noOfPeriods: "" }],
+        periods: [{ class_name: "", subject: "", noOfPeriods: "" }],
         subjects: [],
+        unavailable_slots: [],
       },
-    ]);
+    ];
+    setTeachers(newTeachers);
+    setActiveTeacherIndex(newTeachers.length - 1);
   };
 
   const handleDeleteTeacher = (index) => {
     if (teachers.length > 1) {
       const newTeachers = teachers.filter((_, i) => i !== index);
       setTeachers(newTeachers);
+      
+      // Adjust active index so it remains valid
+      if (activeTeacherIndex >= newTeachers.length) {
+        setActiveTeacherIndex(newTeachers.length - 1);
+      } else if (activeTeacherIndex === index && index > 0) {
+        setActiveTeacherIndex(index - 1);
+      }
     }
   };
 
@@ -84,7 +327,7 @@ function AddTeacher() {
       ...newTeachers[index].periods,
       {
         class_name: "",
-        subject: newTeachers[index].mainSubject,
+        subject: newTeachers[index].mainSubject || "",
         noOfPeriods: "",
       },
     ];
@@ -136,7 +379,6 @@ function AddTeacher() {
         : prev;
       return [...withoutOld, grade];
     });
-    console.log(teachers);
   };
 
   const handleChangeMainSubject = (index, mainSub) => {
@@ -161,17 +403,35 @@ function AddTeacher() {
     setTeachers(newTeachers);
   };
 
-  // Updated generateTimetable function with proper error handling
+  // Helper to validate complete profile status
+  const isTeacherComplete = (teacher) => {
+    if (!teacher.name || !teacher.name.trim()) return false;
+    if (!teacher.mainSubject || teacher.mainSubject === "Select Main Subject") return false;
+    if (!teacher.subjects || teacher.subjects.length === 0) return false;
+    if (!teacher.periods || teacher.periods.length === 0) return false;
+    for (const p of teacher.periods) {
+      if (!p.class_name || p.class_name === "Select Class") return false;
+      if (!p.subject || p.subject === "Select Subject" || p.subject === "") return false;
+      if (!p.noOfPeriods || isNaN(p.noOfPeriods) || p.noOfPeriods <= 0) return false;
+    }
+    return true;
+  };
+
+  // Helper to get total assigned periods
+  const getTeacherTotalPeriods = (teacher) => {
+    return teacher.periods ? teacher.periods.reduce((sum, p) => sum + (parseInt(p.noOfPeriods) || 0), 0) : 0;
+  };
+
   const generateTimetable = async () => {
     setLoading(true);
     setError("");
     setErrorDetails(null);
 
     try {
-      // Validate input
+      // Validate inputs
       for (const teacher of teachers) {
         if (!teacher.name.trim()) {
-          throw new Error("Please enter all teacher names");
+          throw new Error("Please enter names for all teachers.");
         }
         if (
           !teacher.mainSubject ||
@@ -190,10 +450,8 @@ function AddTeacher() {
         }
       }
 
-      // Save current teachers data before generating timetable
       setSavedTeachersData(JSON.parse(JSON.stringify(teachers)));
 
-      // Prepare data for API
       const requestData = {
         userId: user.id,
         title: title,
@@ -218,6 +476,7 @@ function AddTeacher() {
             subject: p.subject,
             noOfPeriods: p.noOfPeriods,
           })),
+          unavailable_slots: teacher.unavailable_slots || [],
         })),
       };
 
@@ -235,7 +494,6 @@ function AddTeacher() {
       );
 
       const data = await response.json();
-      // Check if the response indicates an error or infeasible solution
       if (data.status === "ERROR" || data.status === "INFEASIBLE") {
         setError(data.message || "Failed to generate timetable");
         setErrorDetails(data);
@@ -246,7 +504,6 @@ function AddTeacher() {
         throw new Error(data.detail || "Failed to generate timetable");
       }
 
-      // Check if timetables are empty (additional safety check)
       if (
         !data.class_timetable ||
         Object.keys(data.class_timetable).length === 0
@@ -270,8 +527,6 @@ function AddTeacher() {
   };
 
   const handleBackToTeachers = () => {
-    console.log(savedTeachersData);
-    // Restore the saved teachers data when going back
     if (savedTeachersData) {
       setTeachers(savedTeachersData);
     }
@@ -281,7 +536,6 @@ function AddTeacher() {
   };
 
   const handleRegenerateWithCurrentData = async () => {
-    // Use current teachers data to regenerate
     await generateTimetable();
   };
 
@@ -353,89 +607,55 @@ function AddTeacher() {
     }
   };
 
-  // Helper function to render error details
   const renderErrorDetails = () => {
     if (!errorDetails) return null;
 
     return (
-      <div className="error-details-container">
-        <div className="error-header">
-          <AlertTriangle className="icon-ge error-icon" />
-          <h4>Timetable Generation Failed</h4>
+      <div className="bg-[#fee2e2] border-2 border-[#ef4444] rounded-2xl p-6 my-4 shadow-[0_8px_25px_rgba(239,68,68,0.15)] text-[#7f1d1d] font-sans">
+        <div className="flex items-center gap-3 mb-4 pb-3 border-b border-[#fca5a5]">
+          <AlertTriangle className="text-[#dc2626] w-6 h-6 shrink-0" />
+          <h4 className="text-lg font-bold m-0 text-[#991b1b]">Timetable Generation Failed</h4>
         </div>
 
-        <div className="error-content">
-          <p className="error-main-message">{error}</p>
+        <div className="space-y-4">
+          <p className="text-sm font-semibold text-[#991b1b] leading-normal">{error}</p>
 
           {errorDetails.error_type && (
-            <div className="error-type">
-              <strong>Error Type:</strong> {errorDetails.error_type}
+            <div className="bg-[#dc2626]/10 py-2 px-3 rounded-lg text-xs font-semibold text-[#dc2626] inline-block">
+              <strong>Error Type:</strong> {errorDetails.error_type.replace(/_/g, " ")}
             </div>
           )}
 
           {errorDetails.error_details && (
-            <div className="error-specific-details">
-              <strong>Details:</strong>
-              {typeof errorDetails.error_details === "string" ? (
-                <p>{errorDetails.error_details}</p>
-              ) : (
-                <ul>
-                  {Object.entries(errorDetails.error_details).map(
-                    ([key, value]) => (
-                      <li key={key}>
-                        <strong>{key.replace(/_/g, " ")}:</strong>{" "}
-                        {Array.isArray(value)
-                          ? value.join(", ")
-                          : typeof value === "object"
-                          ? JSON.stringify(value, null, 2)
-                          : String(value)}
-                      </li>
-                    )
-                  )}
-                </ul>
-              )}
-            </div>
+            <DiagnosticsPanel errorDetails={errorDetails} />
           )}
 
-          <div className="error-suggestions">
-            <h5>Suggestions to fix this issue:</h5>
-            <ul>
-              <li>
-                Check if teacher period assignments don't exceed available time
-                slots
-              </li>
-              <li>
-                Ensure class schedules don't conflict with teacher
-                availabilities
-              </li>
-              <li>
-                Verify that subject assignments are realistic for the given time
-                frame
-              </li>
-              <li>
-                Consider reducing the number of periods or adjusting teacher
-                workload
-              </li>
-              <li>
-                Make sure all teachers have feasible subject-class combinations
-              </li>
+          <div className="bg-[#fef3c7] border border-[#f59e0b] rounded-xl p-4 text-xs text-[#92400e] leading-relaxed">
+            <h5 className="font-bold text-sm text-[#78350f] mb-1.5">Suggestions to resolve this constraint conflict:</h5>
+            <ul className="list-disc pl-4 space-y-1">
+              <li>Check if teacher period assignments don't exceed available time slots</li>
+              <li>Ensure class schedules don't conflict with teacher availabilities</li>
+              <li>Verify that subject assignments are realistic for the given time frame</li>
+              <li>Consider reducing the number of periods or adjusting teacher workload</li>
+              <li>Make sure all teachers have feasible subject-class combinations</li>
             </ul>
           </div>
 
-          <div className="error-actions">
+          <div className="pt-2">
             <button
-              className="flex items-center gap-2 bg-[linear-gradient(135deg,#dc2626_0%,#b91c1c_100%)] text-white py-3 px-6 border-none rounded-lg font-medium cursor-pointer transition-all duration-200 ease-in-out no-underline hover:bg-[linear-gradient(135deg,#b91c1c_0%,#991b1b_100%)] hover:-translate-y-[1px] hover:shadow-[0_4px_12px_rgba(220,38,38,0.3)] active:translate-y-0 max-md:w-full max-md:justify-center"
+              className="flex items-center gap-2 bg-[linear-gradient(135deg,#dc2626_0%,#b91c1c_100%)] text-white py-2.5 px-6 border-none rounded-full font-bold cursor-pointer transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_4px_12px_rgba(220,38,38,0.3)]"
+              style={{ borderRadius: "9999px" }}
               onClick={handleRegenerateWithCurrentData}
               disabled={loading}
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                   Retrying...
                 </>
               ) : (
                 <>
-                  <RefreshCw className="w-5 h-5" />
+                  <RefreshCw className="w-4 h-4" />
                   Try Again
                 </>
               )}
@@ -446,35 +666,65 @@ function AddTeacher() {
     );
   };
 
-  // If timetable is generated, show the timetable display
+  // Filter teachers list based on search query
+  const filteredTeachersWithIndices = teachers
+    .map((teacher, index) => ({ teacher, index }))
+    .filter(item => item.teacher.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  // Active teacher selection safety
+  const activeTeacher = teachers[activeTeacherIndex] || teachers[0] || {
+    name: "",
+    subjects: [],
+    assigned_class: "",
+    mainSubject: "",
+    labPeriod: "",
+    periods: [{ class_name: "", subject: "", noOfPeriods: "" }]
+  };
+
   if (timetableData) {
     return (
-      <div className="bg-[linear-gradient(135deg,#000000_0%,#0a1a2e_25%,#16213e_50%,#0f4c75_75%,#3282b8_100%)] min-h-screen text-white relative overflow-x-hidden py-8 mt-[60px] max-md:py-4">
-        <div className="max-w-[80%] mx-auto px-6 max-md:px-4 max-md:max-w-full max-sm:px-3">
-          <div className="timetable-header">
-            <h2 className="text-2xl font-semibold mb-4 text-white [text-shadow:0_2px_4px_rgba(0,0,0,0.3)] max-md:text-xl max-sm:text-lg">Generated Timetable</h2>
-            <div className="action-buttons-container">
+      <div 
+        style={{
+          minHeight: "100vh",
+          background: "radial-gradient(ellipse 100% 60% at 15% 10%, #081225 0%, #030814 60%, #02050b 100%)",
+          color: "#d4e4fa",
+          fontFamily: "'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif",
+          overflowX: "hidden",
+          position: "relative",
+          paddingTop: "120px",
+          paddingBottom: "80px",
+        }}
+      >
+        <FloatingOrbs />
+        <div className="max-w-[1450px] mx-auto px-5 relative z-10">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <h2 className="text-3xl font-extrabold text-white tracking-tight m-0">Generated <span className="text-[#57f1db] font-black">Timetable</span></h2>
+            
+            <div className="flex flex-wrap items-center gap-3">
               <button
-                className="flex items-center gap-2 py-3 px-6 border-none rounded-xl text-base font-medium cursor-pointer transition-all duration-300 ease-in-out text-white no-underline max-md:w-full max-md:justify-center bg-[linear-gradient(135deg,#f59e0b_0%,#d97706_100%)] hover:bg-[linear-gradient(135deg,#d97706_0%,#b45309_100%)] hover:-translate-y-[2px]"
+                className="flex items-center gap-2 py-2.5 px-5 border-none rounded-full text-sm font-bold cursor-pointer transition-all duration-300 ease-in-out text-[#051424] no-underline bg-gradient-to-r from-[#3282b8] to-[#00ff87] hover:scale-[1.02] shadow-[0_4px_15px_rgba(50,130,184,0.2)]"
+                style={{ borderRadius: "9999px" }}
                 onClick={handleSavetoDb}
-                title="Save"
+                title="Save to database"
               >
-                <Save className="w-5 h-5" />
+                <Save className="w-4 h-4" />
                 Save
               </button>
 
               <button
-                className="flex items-center gap-2 py-3 px-6 border-none rounded-xl text-base font-medium cursor-pointer transition-all duration-300 ease-in-out text-white no-underline max-md:w-full max-md:justify-center bg-[linear-gradient(135deg,#f59e0b_0%,#d97706_100%)] hover:bg-[linear-gradient(135deg,#d97706_0%,#b45309_100%)] hover:-translate-y-[2px]"
+                className="flex items-center gap-2 py-2.5 px-5 border border-slate-700/80 rounded-full text-sm font-bold cursor-pointer transition-all duration-300 ease-in-out text-slate-200 bg-slate-800/60 hover:bg-slate-700/60 hover:scale-[1.02]"
+                style={{ borderRadius: "9999px" }}
                 onClick={handleBackToTeachers}
                 title="Go back to edit teachers"
               >
-                <Users size={14} className="button-icon-td" />
+                <Users size={14} />
                 Edit Teachers
               </button>
 
               <button
                 type="button"
-                className="flex items-center gap-2 py-3 px-6 border-none rounded-xl text-base font-medium cursor-pointer transition-all duration-300 ease-in-out text-white no-underline max-md:w-full max-md:justify-center bg-[linear-gradient(135deg,#3b82f6_0%,#2563eb_100%)] hover:bg-[linear-gradient(135deg,#2563eb_0%,#1d4ed8_100%)] hover:-translate-y-[2px]"
+                className="flex items-center gap-2 py-2.5 px-5 border border-[#a78bfa]/40 rounded-full text-sm font-bold cursor-pointer transition-all duration-300 ease-in-out text-[#a78bfa] bg-[#a78bfa]/10 hover:bg-[#a78bfa]/20 hover:scale-[1.02]"
+                style={{ borderRadius: "9999px" }}
                 onClick={() =>
                   navigate("/edit-timetable", {
                     state: {
@@ -496,24 +746,25 @@ function AddTeacher() {
                   })
                 }
               >
-                <Edit3 size={14} className="button-icon-td" />
+                <Edit3 size={14} />
                 Edit timetable
               </button>
 
               <button
-                className="flex items-center gap-2 py-3 px-6 border-none rounded-xl text-base font-medium cursor-pointer transition-all duration-300 ease-in-out text-white no-underline max-md:w-full max-md:justify-center bg-[linear-gradient(135deg,#10b981_0%,#059669_100%)] hover:bg-[linear-gradient(135deg,#059669_0%,#047857_100%)] hover:-translate-y-[2px] disabled:bg-[linear-gradient(135deg,#6b7280_0%,#4b5563_100%)] disabled:cursor-not-allowed disabled:transform-none"
+                className="flex items-center gap-2 py-2.5 px-5 border-none rounded-full text-sm font-bold cursor-pointer transition-all duration-300 ease-in-out text-white bg-[linear-gradient(135deg,#10b981_0%,#059669_100%)] hover:scale-[1.02] shadow-[0_4px_15px_rgba(16,185,129,0.2)] disabled:bg-[linear-gradient(135deg,#6b7280_0%,#4b5563_100%)] disabled:cursor-not-allowed disabled:transform-none"
+                style={{ borderRadius: "9999px" }}
                 onClick={handleRegenerateWithCurrentData}
                 disabled={loading}
                 title="Regenerate timetable with current data"
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
                     Regenerating...
                   </>
                 ) : (
                   <>
-                    <Plus className="w-5 h-5" />
+                    <Plus className="w-4 h-4 mr-1.5" />
                     Regenerate
                   </>
                 )}
@@ -532,83 +783,322 @@ function AddTeacher() {
   }
 
   return (
-    <div className="bg-[linear-gradient(135deg,#000000_0%,#0a1a2e_25%,#16213e_50%,#0f4c75_75%,#3282b8_100%)] min-h-screen text-white relative overflow-x-hidden py-8 mt-[60px] max-md:py-4">
-      <div className="max-w-full w-full px-8">
-        <div className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl font-semibold mb-4 text-white [text-shadow:0_2px_4px_rgba(0,0,0,0.3)] max-md:text-xl max-sm:text-lg">Add Teachers</h2>
-          {savedTeachersData && (
-            <div className="bg-[rgba(59,130,246,0.1)] border border-[rgba(59,130,246,0.3)] rounded-lg p-4 text-[#93c5fd] text-[0.9rem] backdrop-blur-[10px]">
-              <strong>Note:</strong> You can edit the data below and regenerate
-              the timetable
-            </div>
-          )}
+    <div 
+      style={{
+        minHeight: "100vh",
+        background: "radial-gradient(ellipse 100% 60% at 15% 10%, #081225 0%, #030814 60%, #02050b 100%)",
+        color: "#d4e4fa",
+        fontFamily: "'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif",
+        overflowX: "hidden",
+        position: "relative",
+        paddingTop: "120px",
+        paddingBottom: "80px",
+      }}
+    >
+      <FloatingOrbs />
+      <div className="max-w-[1400px] mx-auto px-5 relative z-10 animate-[fadeInUp_0.6s_ease-out]">
+        <WizardSteps current={2} />
+
+        {/* Header Section */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8 border-b border-[rgba(255,255,255,0.06)] pb-6">
+          <div>
+            <h2 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight m-0">Configure <span className="text-[#57f1db] font-black">Teachers</span></h2>
+            <p className="text-sm text-slate-400 mt-2 m-0 max-w-xl leading-relaxed">
+              Define teacher profiles, main subject areas, lab requirements, and period counts.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center gap-4 shrink-0">
+            {savedTeachersData && (
+              <div className="bg-[#3282b8]/10 border border-[#3282b8]/30 rounded-xl p-3 text-[#93c5fd] text-xs backdrop-blur-[10px] max-w-xs">
+                <strong>Note:</strong> Edit values below and click Regenerate.
+              </div>
+            )}
+            <button
+              className="w-full sm:w-auto flex items-center justify-center py-3.5 px-8 border-none rounded-full bg-gradient-to-r from-[#3282b8] to-[#00ff87] text-[#051424] text-sm font-extrabold cursor-pointer transition-all duration-300 shadow-[0_8px_25px_rgba(50,130,184,0.3)] hover:-translate-y-[2px] hover:scale-[1.02] hover:shadow-[0_12px_30px_rgba(50,130,184,0.4)] disabled:opacity-50"
+              style={{ borderRadius: "9999px" }}
+              onClick={generateTimetable}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  Generating...
+                </>
+              ) : savedTeachersData ? (
+                "Regenerate Timetable"
+              ) : (
+                "Generate Timetable"
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Enhanced Error Display */}
         {error && (
-          <div className="error-section">
+          <div className="error-section mb-8">
             {errorDetails ? (
               renderErrorDetails()
             ) : (
-              <div className="bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)] rounded-lg p-4 text-[#fca5a5] text-[0.9rem] mb-6 backdrop-blur-[10px]">
-                <AlertTriangle className="w-5 h-5" />
-                {error}
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-300 text-sm backdrop-blur-[10px] flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+                <span>{error}</span>
               </div>
             )}
           </div>
         )}
 
-        <div className="flex flex-col gap-8">
-          {teachers.map((teacher, index) => {
-            return (
-              <div className="bg-[rgba(255,255,255,0.05)] border-2 border-[rgba(255,255,255,0.1)] rounded-2xl p-8 relative backdrop-blur-[10px] transition-all duration-300 ease-in-out w-full box-border hover:bg-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.2)] hover:-translate-y-[2px] hover:shadow-[0_8px_32px_rgba(0,0,0,0.3)] max-sm:p-6" key={index}>
-                {/* Delete Teacher Button */}
-                {teachers.length > 1 && (
-                  <button
-                    onClick={() => handleDeleteTeacher(index)}
-                    className="absolute top-4 right-4 bg-[linear-gradient(135deg,#ef4444_0%,#dc2626_100%)] border-none rounded-lg p-2 text-white cursor-pointer transition-all duration-300 ease-in-out flex items-center justify-center hover:bg-[linear-gradient(135deg,#dc2626_0%,#b91c1c_100%)] hover:scale-105"
-                    title="Delete Teacher"
+        {/* Main Dashboard Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* Left Column: Teacher Directory (Sidebar) */}
+          <div className="lg:col-span-4 space-y-4">
+            <div 
+              style={{
+                background: "linear-gradient(135deg, rgba(16, 28, 54, 0.45) 0%, rgba(10, 18, 36, 0.55) 100%)",
+                border: "1px solid rgba(87, 241, 219, 0.12)",
+                borderRadius: "24px",
+                padding: "24px",
+                backdropFilter: "blur(24px)",
+                boxShadow: "0 20px 40px rgba(0, 0, 0, 0.4)",
+              }}
+              className="space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2 m-0">
+                    <span className="w-1.5 h-4 bg-[#57f1db] rounded-full inline-block" />
+                    Teachers ({teachers.length})
+                  </h3>
+                  {(() => {
+                    const ready = teachers.filter(isTeacherComplete).length;
+                    const total = teachers.length;
+                    return (
+                      <p style={{ fontSize: 10, color: ready === total ? "#10b981" : "#f59e0b", margin: "3px 0 0 16px", fontWeight: 700 }}>
+                        {ready}/{total} ready
+                      </p>
+                    );
+                  })()}
+                </div>
+                <button
+                  onClick={handleAddTeacher}
+                  className="flex items-center justify-center p-1.5 px-4 border border-teal-500/30 rounded-full bg-teal-500/10 hover:bg-teal-500/20 text-[#57f1db] text-xs font-bold cursor-pointer transition-all duration-200"
+                  style={{ borderRadius: "9999px" }}
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add
+                </button>
+              </div>
+
+              {/* Search bar */}
+              <div className="relative">
+                <Search 
+                  className="absolute text-slate-500" 
+                  size={16}
+                  style={{ right: "0.95rem", top: "50%", transform: "translateY(-50%)" }}
+                />
+                <input
+                  type="text"
+                  className="w-full p-3 pr-8 border border-slate-700/80 rounded-xl bg-slate-900/50 text-white text-xs focus:outline-none focus:border-[#57f1db] placeholder:text-slate-500 transition-all duration-300"
+                  placeholder="Search teacher by name..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ paddingLeft: "2.65rem" }}
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-3 text-slate-400 hover:text-white bg-transparent border-none cursor-pointer p-0"
+                    style={{ top: "50%", transform: "translateY(-50%)" }}
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 )}
+              </div>
 
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-6 mb-8 max-md:grid-cols-1 max-md:gap-4 max-sm:gap-3">
-                  <div className="flex flex-col gap-4">
-                    <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">Name</label>
+              {/* Scrollable list directory */}
+              <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
+                {filteredTeachersWithIndices.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500 text-xs italic">
+                    {searchQuery ? "No teachers match search" : "Add a teacher to get started"}
+                  </div>
+                ) : (
+                  filteredTeachersWithIndices.map(({ teacher, index }) => {
+                    const active = index === activeTeacherIndex;
+                    const complete = isTeacherComplete(teacher);
+                    const totalPeriods = getTeacherTotalPeriods(teacher);
+                    
+                    return (
+                      <div
+                        key={index}
+                        onClick={() => {
+                          setActiveTeacherIndex(index);
+                          setError("");
+                        }}
+                        style={{
+                          background: active 
+                            ? "linear-gradient(135deg, rgba(87, 241, 219, 0.08) 0%, rgba(124, 58, 237, 0.08) 100%)" 
+                            : "rgba(10, 18, 36, 0.25)",
+                          border: active 
+                            ? "1px solid rgba(87, 241, 219, 0.45)" 
+                            : "1px solid rgba(255, 255, 255, 0.05)",
+                          borderRadius: "16px",
+                          cursor: "pointer"
+                        }}
+                        className={`p-3.5 transition-all duration-300 hover:border-teal-500/35 relative flex items-center justify-between group ${
+                          active ? "shadow-[0_0_15px_rgba(87,241,219,0.1)]" : ""
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          {/* Avatar circle with initials */}
+                          {(() => {
+                            const name = teacher.name.trim() || "?";
+                            const initials = name.split(" ").map(w => w[0]).slice(0,2).join("").toUpperCase();
+                            const hue = name.split("").reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
+                            return (
+                              <div style={{
+                                width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+                                background: `hsl(${hue},55%,28%)`,
+                                border: `2px solid hsl(${hue},55%,45%)`,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: 11, fontWeight: 800,
+                                color: `hsl(${hue},80%,80%)`,
+                              }}>
+                                {initials}
+                              </div>
+                            );
+                          })()}
+
+                          <div className="overflow-hidden flex-1 min-w-0">
+                            <h4 className="text-sm font-bold text-white truncate m-0">
+                              {teacher.name.trim() || <span className="text-slate-500/60 italic font-normal">Unnamed</span>}
+                            </h4>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              {teacher.mainSubject && (
+                                <span style={{ fontSize: 9, fontWeight: 700, background: "rgba(87,241,219,0.12)", color: "#57f1db", borderRadius: 4, padding: "1px 5px", letterSpacing: "0.04em" }}>
+                                  {teacher.mainSubject}
+                                </span>
+                              )}
+                              <span style={{ fontSize: 9, color: "#64748b", fontWeight: 600 }}>
+                                {totalPeriods}p
+                              </span>
+                            </div>
+                            {/* Readiness bar */}
+                            <div style={{ marginTop: 4, height: 2, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                              <div style={{
+                                height: "100%", borderRadius: 2, transition: "width 0.4s ease",
+                                width: complete ? "100%" : (teacher.name && teacher.mainSubject ? "60%" : "20%"),
+                                background: complete ? "#10b981" : "#f59e0b",
+                              }} />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Delete Trash Button */}
+                        {teachers.length > 1 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteTeacher(index);
+                            }}
+                            className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500 text-red-400 p-1.5 rounded-full cursor-pointer transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100 flex items-center justify-center w-7 h-7 shrink-0"
+                            style={{ borderRadius: "9999px" }}
+                            title="Delete Teacher"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Workarea Editor Panel */}
+          <div className="lg:col-span-8">
+            {teachers.length === 0 ? (
+              <div 
+                style={{
+                  background: "rgba(10, 18, 36, 0.45)",
+                  border: "1px solid rgba(87, 241, 219, 0.12)",
+                  borderRadius: "24px",
+                  padding: "48px",
+                  backdropFilter: "blur(24px)",
+                }}
+                className="text-center"
+              >
+                <Users className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                <h4 className="text-lg font-bold text-white mb-2">No Teachers Added</h4>
+                <p className="text-slate-400 text-sm max-w-sm mx-auto mb-6">Create profiles to configure teaching subject loads and schedule details.</p>
+                <button
+                  onClick={handleAddTeacher}
+                  className="py-3 px-6 border-none rounded-full bg-gradient-to-r from-[#3282b8] to-[#00ff87] text-[#051424] text-sm font-extrabold cursor-pointer transition-all duration-300 hover:scale-[1.02]"
+                  style={{ borderRadius: "9999px" }}
+                >
+                  Create First Profile
+                </button>
+              </div>
+            ) : (
+              <div 
+                style={{
+                  background: "linear-gradient(135deg, rgba(16, 28, 54, 0.45) 0%, rgba(10, 18, 36, 0.55) 100%)",
+                  border: "1px solid rgba(87, 241, 219, 0.12)",
+                  borderRadius: "24px",
+                  padding: "32px",
+                  backdropFilter: "blur(24px)",
+                  boxShadow: "0 20px 40px rgba(0, 0, 0, 0.4)",
+                }}
+                className="transition-all duration-300 hover:border-teal-500/25 w-full box-border max-sm:p-6"
+              >
+                
+                {/* Editor Header */}
+                <div className="flex items-center justify-between pb-4 mb-6 border-b border-[rgba(255,255,255,0.06)] flex-wrap gap-3">
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2 m-0">
+                    <span className="w-1.5 h-4 bg-[#a78bfa] rounded-full inline-block" />
+                    Configure: {activeTeacher.name.trim() || "Unnamed Profile"}
+                  </h3>
+                  <span 
+                    className={`text-[0.7rem] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                      isTeacherComplete(activeTeacher) 
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                        : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                    }`}
+                  >
+                    {isTeacherComplete(activeTeacher) ? "✓ Ready" : "⚠️ Details Missing"}
+                  </span>
+                </div>
+
+                {/* Info Card Fields */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                  <div className="flex flex-col gap-2">
+                    <label className="block text-[0.7rem] font-bold text-slate-400 uppercase tracking-wider">Teacher Name</label>
                     <input
                       type="text"
                       className="form-input-ge"
-                      placeholder={`Teacher ${index + 1}`}
-                      value={teacher.name}
-                      onChange={(e) =>
-                        handleChangeTeacherName(index, e.target.value)
-                      }
+                      placeholder="e.g., Mr. Jason"
+                      value={activeTeacher.name}
+                      onChange={(e) => handleChangeTeacherName(activeTeacherIndex, e.target.value)}
                     />
                   </div>
 
-                  <div className="flex flex-col gap-4">
-                    <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">Subjects</label>
+                  <div className="flex flex-col gap-2">
+                    <label className="block text-[0.7rem] font-bold text-slate-400 uppercase tracking-wider">Subjects Taught</label>
                     <DropdownChecklist
                       options={subjects}
-                      selected={teacher.subjects}
-                      onChange={(selected) =>
-                        handleChangeSelectedSubjects(index, selected)
-                      }
+                      selected={activeTeacher.subjects}
+                      onChange={(selected) => handleChangeSelectedSubjects(activeTeacherIndex, selected)}
                     />
                   </div>
 
-                  <div className="flex flex-col gap-4">
-                    <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">Main Subject</label>
+                  <div className="flex flex-col gap-2">
+                    <label className="block text-[0.7rem] font-bold text-slate-400 uppercase tracking-wider">Primary Subject</label>
                     <select
                       className="form-select-ge"
-                      value={teacher.mainSubject}
-                      onChange={(e) =>
-                        handleChangeMainSubject(index, e.target.value)
-                      }
+                      value={activeTeacher.mainSubject}
+                      onChange={(e) => handleChangeMainSubject(activeTeacherIndex, e.target.value)}
                     >
                       <option>Select Main Subject</option>
-                      {teacher.subjects.map((subject, ind) =>
+                      {activeTeacher.subjects.map((subject, ind) =>
                         subject !== "" ? (
                           <option key={ind} value={subject}>
                             {subject}
@@ -618,17 +1108,15 @@ function AddTeacher() {
                     </select>
                   </div>
 
-                  <div className="flex flex-col gap-4">
-                    <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">Lab Period</label>
+                  <div className="flex flex-col gap-2">
+                    <label className="block text-[0.7rem] font-bold text-slate-400 uppercase tracking-wider">Lab Subject (Optional)</label>
                     <select
                       className="form-select-ge"
-                      value={teacher.labPeriod}
-                      onChange={(e) =>
-                        handleChangeLabPeriod(index, e.target.value)
-                      }
+                      value={activeTeacher.labPeriod}
+                      onChange={(e) => handleChangeLabPeriod(activeTeacherIndex, e.target.value)}
                     >
                       <option>Select Lab Period</option>
-                      {teacher.subjects.map((subject, ind) =>
+                      {activeTeacher.subjects.map((subject, ind) =>
                         subject !== "" ? (
                           <option key={ind} value={subject}>
                             {subject}
@@ -639,14 +1127,15 @@ function AddTeacher() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 mb-8 p-4 bg-[rgba(255,255,255,0.03)] rounded-xl border border-[rgba(255,255,255,0.1)] max-md:flex-col max-md:items-stretch">
-                  <label className="text-[1.1rem] font-medium text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.3)] whitespace-nowrap">
-                    If class teacher, select class
+                {/* Class Teacher Dropdown */}
+                <div className="flex items-center gap-4 mb-8 p-4 bg-slate-900/30 rounded-2xl border border-slate-800/80 flex-wrap max-md:flex-col max-md:items-stretch">
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider whitespace-nowrap">
+                    If Class Teacher, Select Grade Assignment:
                   </label>
                   <select
                     className="form-select-ge max-w-[200px] max-md:max-w-full"
-                    value={teacher.assigned_class}
-                    onChange={(e) => handleChangeClass(index, e.target.value)}
+                    value={activeTeacher.assigned_class}
+                    onChange={(e) => handleChangeClass(activeTeacherIndex, e.target.value)}
                   >
                     <option>Select Class</option>
                     {classes.map((clas, ind) =>
@@ -656,7 +1145,7 @@ function AddTeacher() {
                           value={clas}
                           disabled={
                             assignedClasses.includes(clas) &&
-                            clas !== teacher.assigned_class
+                            clas !== activeTeacher.assigned_class
                           }
                         >
                           {clas}
@@ -666,35 +1155,38 @@ function AddTeacher() {
                   </select>
                 </div>
 
-                <div className="mt-8">
-                  <h3 className="text-[1.3rem] font-semibold text-white mb-6 [text-shadow:0_2px_4px_rgba(0,0,0,0.3)]">Assign Periods</h3>
+                {/* Period Workloads */}
+                <div className="mt-8 pt-6 border-t border-[rgba(255,255,255,0.06)]">
+                  <h3 className="text-base font-bold text-white mb-6 flex items-center gap-2">
+                    <span className="w-1 h-3.5 bg-[#a78bfa] rounded-full inline-block" />
+                    Period Workloads
+                  </h3>
+                  
                   <div className="flex flex-col gap-4 mb-6">
-                    {teacher.periods.map((period, ind) => {
+                    {activeTeacher.periods.map((period, ind) => {
                       return (
-                        <div className="grid grid-cols-3 gap-4 items-end p-4 bg-[rgba(255,255,255,0.03)] rounded-xl border border-[rgba(255,255,255,0.1)] relative max-md:grid-cols-1 max-md:pt-8 max-sm:p-6 max-sm:pt-6" key={ind}>
-                          {/* Delete Period Button - positioned absolutely in top-right */}
-                          {teacher.periods.length > 1 && (
+                        <div 
+                          className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end p-4 bg-slate-950/20 rounded-2xl border border-slate-800/60 relative max-md:pt-8" 
+                          key={ind}
+                        >
+                          {/* Remove Period Button */}
+                          {activeTeacher.periods.length > 1 && (
                             <button
-                              onClick={() => handleDeletePeriod(index, ind)}
-                              className="absolute top-2 right-2 bg-[linear-gradient(135deg,#ef4444_0%,#dc2626_100%)] border-none rounded-md p-1 text-white cursor-pointer transition-all duration-300 ease-in-out flex items-center justify-center h-8 w-8 z-10 hover:bg-[linear-gradient(135deg,#dc2626_0%,#b91c1c_100%)] hover:scale-105 max-sm:h-7 max-sm:w-7"
-                              title="Delete Period"
+                              onClick={() => handleDeletePeriod(activeTeacherIndex, ind)}
+                              className="absolute top-2 right-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500 text-red-400 p-1.5 rounded-full cursor-pointer transition-all duration-200 flex items-center justify-center h-7 w-7"
+                              style={{ borderRadius: "9999px" }}
+                              title="Remove Assignment"
                             >
-                              <X className="w-5 h-5" />
+                              <X className="w-3.5 h-3.5" />
                             </button>
                           )}
 
-                          <div className="flex flex-col gap-4">
-                            <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">Class</label>
+                          <div className="flex flex-col gap-2">
+                            <label className="block text-[0.65rem] font-bold text-slate-400 uppercase tracking-wider">Target Class</label>
                             <select
                               className="form-select-ge"
                               value={period.class_name}
-                              onChange={(e) =>
-                                handleChangePeriodClass(
-                                  index,
-                                  ind,
-                                  e.target.value
-                                )
-                              }
+                              onChange={(e) => handleChangePeriodClass(activeTeacherIndex, ind, e.target.value)}
                             >
                               <option>Select Class</option>
                               {classes.map((clas, i) =>
@@ -707,26 +1199,17 @@ function AddTeacher() {
                             </select>
                           </div>
 
-                          <div className="flex flex-col gap-4">
-                            <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">Subject</label>
+                          <div className="flex flex-col gap-2">
+                            <label className="block text-[0.65rem] font-bold text-slate-400 uppercase tracking-wider">Subject</label>
                             <select
                               className="form-select-ge"
                               value={period.subject}
-                              onChange={(e) =>
-                                handleChangePeriodSubject(
-                                  index,
-                                  ind,
-                                  e.target.value
-                                )
-                              }
+                              onChange={(e) => handleChangePeriodSubject(activeTeacherIndex, ind, e.target.value)}
                             >
-                              <option>
-                                {teacher.mainSubject
-                                  ? teacher.mainSubject
-                                  : "Select Subject"}
-                              </option>
-                              {teacher.subjects.map((sub, subInd) =>
-                                sub !== "" && sub !== teacher.mainSubject ? (
+                              <option value="">Select Subject</option>
+                              <option value={activeTeacher.mainSubject}>{activeTeacher.mainSubject}</option>
+                              {activeTeacher.subjects.map((sub, subInd) =>
+                                sub !== "" && sub !== activeTeacher.mainSubject ? (
                                   <option key={subInd} value={sub}>
                                     {sub}
                                   </option>
@@ -735,20 +1218,14 @@ function AddTeacher() {
                             </select>
                           </div>
 
-                          <div className="flex flex-col gap-4">
-                            <label className="block mb-2 font-medium text-white text-[0.9rem] [text-shadow:0_1px_2px_rgba(0,0,0,0.3)]">No of Periods</label>
+                          <div className="flex flex-col gap-2">
+                            <label className="block text-[0.65rem] font-bold text-slate-400 uppercase tracking-wider">No. of Periods / Week</label>
                             <input
                               type="number"
                               className="form-input-ge"
-                              placeholder="No of periods"
-                              value={period.noOfPeriods}
-                              onChange={(e) =>
-                                handleChangePeriodNumber(
-                                  index,
-                                  ind,
-                                  e.target.value
-                                )
-                              }
+                              placeholder="e.g., 4"
+                              value={period.noOfPeriods || ""}
+                              onChange={(e) => handleChangePeriodNumber(activeTeacherIndex, ind, e.target.value)}
                             />
                           </div>
                         </div>
@@ -757,46 +1234,91 @@ function AddTeacher() {
                   </div>
 
                   <button
-                    onClick={() => handleAddPeriod(index)}
-                    className="add-button-ge"
+                    onClick={() => handleAddPeriod(activeTeacherIndex)}
+                    className="flex items-center justify-center gap-1.5 p-2 px-4 border border-dashed border-[#57f1db]/40 hover:border-[#57f1db] rounded-xl text-[#57f1db] text-xs font-bold bg-[#57f1db]/5 hover:bg-[#57f1db]/10 transition-all cursor-pointer"
+                    style={{ borderRadius: "12px" }}
                   >
-                    <Plus className="w-5 h-5" />
-                    Add another period
+                    <Plus className="w-3.5 h-3.5" />
+                    Assign another class/period
                   </button>
                 </div>
+
+                {/* Teacher Availability Matrix */}
+                <div className="mt-8 pt-6 border-t border-[rgba(255,255,255,0.06)]">
+                  <h3 className="text-base font-bold text-white mb-2 flex items-center gap-2">
+                    <span className="w-1.5 h-4 bg-[#57f1db] rounded-full inline-block" />
+                    Teacher Availability Matrix
+                  </h3>
+                  <p className="text-xs text-slate-400 mb-6">
+                    Click slots to toggle teacher availability. Blocked slots (marked in red) will prevent the solver from scheduling classes for this teacher.
+                  </p>
+                  
+                  {/* Legend */}
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="flex items-center gap-1.5">
+                      <div style={{ width: 12, height: 12, borderRadius: 3, background: "rgba(52,211,153,0.15)", border: "1px solid rgba(52,211,153,0.4)" }} />
+                      <span style={{ fontSize: 10, color: "#64748b", fontWeight: 600 }}>Available</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div style={{ width: 12, height: 12, borderRadius: 3, background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.5)" }} />
+                      <span style={{ fontSize: 10, color: "#64748b", fontWeight: 600 }}>Blocked (solver will not schedule here)</span>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-2xl border border-slate-800/80 bg-slate-950/40 p-3">
+                    <table className="border-collapse" style={{ minWidth: "100%" }}>
+                      <thead>
+                        <tr>
+                          <th style={{ padding: "8px 12px", textAlign: "left", fontSize: 10, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid rgba(255,255,255,0.06)", minWidth: 70 }}>Day</th>
+                          {Array.from({ length: parseInt(periods) || 8 }).map((_, pIndex) => (
+                            <th key={pIndex} style={{ padding: "8px 6px", textAlign: "center", fontSize: 10, color: "#475569", fontWeight: 700, borderBottom: "1px solid rgba(255,255,255,0.06)", minWidth: 52 }}>
+                              P{pIndex + 1}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: parseInt(workingDays) || 5 }).map((_, dIndex) => {
+                          const dayName = dayNames[dIndex] || `Day ${dIndex + 1}`;
+                          return (
+                            <tr key={dIndex}>
+                              <td style={{ padding: "6px 12px", fontSize: 11, fontWeight: 700, color: "#94a3b8", whiteSpace: "nowrap" }}>{dayName}</td>
+                              {Array.from({ length: parseInt(periods) || 8 }).map((_, pIndex) => {
+                                const blocked = isSlotBlocked(activeTeacher, dIndex, pIndex);
+                                return (
+                                  <td key={pIndex} style={{ padding: "4px 4px", textAlign: "center" }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleSlot(activeTeacherIndex, dIndex, pIndex)}
+                                      title={`${dayName} · Period ${pIndex + 1}: click to ${blocked ? "unblock" : "block"}`}
+                                      style={{
+                                        width: 44, height: 44, borderRadius: 10, cursor: "pointer",
+                                        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
+                                        transition: "all 0.18s",
+                                        background: blocked ? "rgba(239,68,68,0.12)" : "rgba(52,211,153,0.06)",
+                                        border: blocked ? "1.5px solid rgba(239,68,68,0.55)" : "1.5px solid rgba(52,211,153,0.15)",
+                                        boxShadow: blocked ? "0 0 10px rgba(239,68,68,0.12)" : "none",
+                                      }}
+                                    >
+                                      <span style={{ fontSize: 14 }}>{blocked ? "🔒" : "✓"}</span>
+                                      <span style={{ fontSize: 8, fontWeight: 700, color: blocked ? "#f87171" : "#6ee7b7", letterSpacing: "0.02em" }}>P{pIndex + 1}</span>
+                                    </button>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-            );
-          })}
-
-          <div className="flex justify-center mt-8">
-            <button
-              onClick={handleAddTeacher}
-              className="flex items-center justify-center p-4 border-2 border-transparent rounded-[12px] bg-[linear-gradient(135deg,#10b981_0%,#059669_100%)] text-white text-[1.1rem] font-medium cursor-pointer transition-all duration-300 ease-in-out gap-2 min-h-[56px] hover:bg-[linear-gradient(135deg,#059669_0%,#047857_100%)] hover:-translate-y-[2px] hover:shadow-[0_8px_25px_rgba(16,185,129,0.4)] active:translate-y-0 w-full max-w-[400px] p-5"
-            >
-              <Plus className="w-5 h-5" />
-              Add another Teacher
-            </button>
-          </div>
-
-          <div className="flex justify-center items-center mt-12 mb-8">
-            <button
-              className="flex items-center justify-center py-5 px-10 border-none rounded-[15px] bg-[linear-gradient(135deg,#1f2937_0%,#374151_100%)] text-white text-[1.25rem] font-semibold cursor-pointer transition-all duration-300 ease-in-out gap-3 min-w-[200px] relative overflow-hidden group hover:bg-[linear-gradient(135deg,#374151_0%,#4b5563_100%)] hover:-translate-y-[3px] hover:shadow-[0_10px_30px_rgba(0,0,0,0.3)] active:-translate-y-[1px] max-md:py-4 max-md:px-8 max-md:text-[1.1rem] max-md:min-w-[180px] max-sm:py-3.5 max-sm:px-6 max-sm:text-base max-sm:min-w-[160px] before:content-[''] before:absolute before:top-0 before:left-[-100%] before:w-full before:h-full before:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent)] before:transition-[left] before:duration-500 before:ease-in-out hover:before:left-full"
-              onClick={generateTimetable}
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                  Generating...
-                </>
-              ) : savedTeachersData ? (
-                "Regenerate Timetable"
-              ) : (
-                "Generate Timetable"
-              )}
-            </button>
+            )}
           </div>
         </div>
+
+
       </div>
     </div>
   );
