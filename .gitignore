@@ -171,6 +171,9 @@ Thumbs.db
 .pytest_cache/
 coverage/
 
+# Local runtime data (single-file JSON persistence)
+backend/data/
+
 # Pipenv/Poetry
 Pipfile.lock
 poetry.lock
