@@ -11,16 +11,26 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api_models import (
+    ApplyChangeRequest,
     CatalogUpdate,
+    ChangeProposalRequest,
     CreateChildVersionRequest,
     GenerateRequest,
     SaveVersionRequest,
     SettingsUpdate,
 )
 from base_solver import GenerationError, generate_base_timetable
-from domain import AppState, LessonCell, TimetableVersion
+from change_agent import propose_changes
+from domain import (
+    AppState,
+    AppliedChange,
+    ChangeEventStatus,
+    DateException,
+    LessonCell,
+    TimetableVersion,
+)
 from repository import DataFileError, JsonRepository, RevisionConflict
-from schedule_service import create_child_version
+from schedule_service import NoActiveTimetable, create_child_version, resolve_day
 from validation import (
     ScheduleValidationError,
     ValidationIssue,
@@ -373,6 +383,102 @@ def register_routes(app: FastAPI) -> None:
         restored = repository.restore_backup(name)
         repository.backup_limit = restored.settings.backup_limit
         return _encode(restored)
+
+    @app.post("/api/change-proposals")
+    def create_change_proposals(payload: ChangeProposalRequest, request: Request):
+        state = _repository(request).load()
+        _raise_if_invalid_catalog(state)
+        proposals = propose_changes(state, payload.event)
+        if not proposals:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "no_complete_change_plan",
+                    "message": "could not find a complete resolution for the change event",
+                },
+            )
+        return {
+            "base_revision": state.revision,
+            "proposals": [_encode(p) for p in proposals],
+        }
+
+    @app.post("/api/changes/apply")
+    def apply_change(payload: ApplyChangeRequest, request: Request):
+        proposal = payload.proposal
+        base_revision = proposal.base_revision
+
+        def mutation(state: AppState) -> AppState:
+            _find_version(state, proposal.base_version_id)
+            live_proposals = propose_changes(state, proposal.event)
+            if not live_proposals:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "proposal_no_longer_valid",
+                        "message": "the proposed change is no longer valid against current state",
+                    },
+                )
+            matching = [p for p in live_proposals if p.id == proposal.id or (p.strategy == proposal.strategy and p.explanation == proposal.explanation)]
+            if not matching:
+                matching = [p for p in live_proposals if len(p.operations) == len(proposal.operations) and len(p.date_exceptions) == len(proposal.date_exceptions)]
+            if not matching:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "proposal_tampered_or_invalid",
+                        "message": "the proposal does not match any valid plan for the current state",
+                    },
+                )
+            valid_proposal = matching[0]
+            new_version_id = None
+            if valid_proposal.version_candidate:
+                v = rebuild_resource_indexes(state, valid_proposal.version_candidate)
+                assert_valid_version(state, v)
+                state.timetable_versions.append(v)
+                new_version_id = v.id
+            event = proposal.event.copy(update={"status": ChangeEventStatus.APPLIED})
+            state.change_events.append(event)
+            applied = AppliedChange(
+                event=event,
+                proposal_id=valid_proposal.id,
+                base_version_id=proposal.base_version_id,
+                strategy=valid_proposal.strategy,
+                score=valid_proposal.score,
+                new_version_id=new_version_id,
+                operations=valid_proposal.operations,
+                date_exceptions=valid_proposal.date_exceptions,
+            )
+            state.applied_changes.append(applied)
+            _assert_valid_persisted_state(state)
+            return state
+
+        saved = _repository(request).mutate(base_revision, mutation)
+        return _encode(saved)
+
+    @app.get("/api/changes")
+    def list_applied_changes(request: Request):
+        state = _repository(request).load()
+        changes = sorted(
+            state.applied_changes,
+            key=lambda c: c.applied_at,
+            reverse=True,
+        )
+        return _encode(changes)
+
+    @app.get("/api/calendar/day")
+    def get_calendar_day(date: str, request: Request):
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="invalid date format, expected YYYY-MM-DD")
+        state = _repository(request).load()
+        try:
+            resolved = resolve_day(state, target_date)
+        except NoActiveTimetable:
+            raise HTTPException(status_code=404, detail="no active timetable for the given date")
+        if resolved.version_id is None:
+            raise HTTPException(status_code=404, detail="no active timetable for the given date")
+        return _encode(resolved)
 
 
 def register_error_handlers(app: FastAPI) -> None:

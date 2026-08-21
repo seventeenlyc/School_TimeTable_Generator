@@ -4,6 +4,8 @@ from typing import List
 from pydantic import BaseModel, Field
 
 from domain import (
+    ChangeEvent,
+    ChangeProposal,
     ClassSchedules,
     CourseRequirement,
     Room,
@@ -46,3 +48,11 @@ class CreateChildVersionRequest(RevisionedRequest):
     name: str = Field(min_length=1)
     effective_from: date
     class_schedules: ClassSchedules
+
+
+class ChangeProposalRequest(BaseModel):
+    event: ChangeEvent
+
+
+class ApplyChangeRequest(BaseModel):
+    proposal: ChangeProposal

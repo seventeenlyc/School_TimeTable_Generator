@@ -150,6 +150,7 @@ class ChangeEventKind(str, Enum):
 class ChangeEventStatus(str, Enum):
     PENDING = "pending"
     PROCESSED = "processed"
+    APPLIED = "applied"
 
 
 class ChangeEvent(DomainModel):

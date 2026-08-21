@@ -340,3 +340,109 @@ def make_state_with_substitution_exception():
         )
     ]
     return state
+
+
+# ── Helpers for test_api_changes ──────────────────────────────────
+
+
+def make_four_slot_settings() -> Settings:
+    return Settings(periods_per_day=4, max_daily_subject_periods=2)
+
+
+def make_standard_teachers():
+    return [
+        Teacher(
+            id="T-ZHANG",
+            name="张老师",
+            qualified_subject_ids=["S-MATH", "S-PHYS"],
+            teaching_assignment_ids=["REQ-C1-MATH", "REQ-C2-PHYS"],
+        ),
+        Teacher(
+            id="T-WANG",
+            name="王老师",
+            qualified_subject_ids=["S-MATH", "S-CHEM"],
+            teaching_assignment_ids=["REQ-C1-CHEM", "REQ-C2-MATH"],
+        ),
+        Teacher(
+            id="T-LI",
+            name="李老师",
+            qualified_subject_ids=["S-PHYS", "S-CHEM"],
+            teaching_assignment_ids=["REQ-C1-PHYS", "REQ-C2-CHEM"],
+        ),
+    ]
+
+
+def make_standard_classes():
+    return [
+        SchoolClass(id="C-1", name="一班"),
+        SchoolClass(id="C-2", name="二班"),
+    ]
+
+
+def make_standard_subjects():
+    return [
+        Subject(id="S-MATH", name="数学"),
+        Subject(id="S-PHYS", name="物理"),
+        Subject(id="S-CHEM", name="化学"),
+    ]
+
+
+def make_standard_rooms():
+    return [
+        Room(id="R-101", name="101教室"),
+        Room(id="R-102", name="102教室"),
+    ]
+
+
+def make_conflict_free_requirements():
+    # Each class gets 3 subjects × 1 period = 3 per class (fits inside 4 slots)
+    return [
+        CourseRequirement(
+            id="REQ-C1-MATH",
+            class_id="C-1",
+            subject_id="S-MATH",
+            teacher_id="T-ZHANG",
+            room_id="R-101",
+            periods_per_week=1,
+        ),
+        CourseRequirement(
+            id="REQ-C1-PHYS",
+            class_id="C-1",
+            subject_id="S-PHYS",
+            teacher_id="T-LI",
+            room_id="R-101",
+            periods_per_week=1,
+        ),
+        CourseRequirement(
+            id="REQ-C1-CHEM",
+            class_id="C-1",
+            subject_id="S-CHEM",
+            teacher_id="T-WANG",
+            room_id="R-101",
+            periods_per_week=1,
+        ),
+        CourseRequirement(
+            id="REQ-C2-MATH",
+            class_id="C-2",
+            subject_id="S-MATH",
+            teacher_id="T-WANG",
+            room_id="R-102",
+            periods_per_week=1,
+        ),
+        CourseRequirement(
+            id="REQ-C2-PHYS",
+            class_id="C-2",
+            subject_id="S-PHYS",
+            teacher_id="T-ZHANG",
+            room_id="R-102",
+            periods_per_week=1,
+        ),
+        CourseRequirement(
+            id="REQ-C2-CHEM",
+            class_id="C-2",
+            subject_id="S-CHEM",
+            teacher_id="T-LI",
+            room_id="R-102",
+            periods_per_week=1,
+        ),
+    ]
