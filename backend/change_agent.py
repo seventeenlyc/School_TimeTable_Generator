@@ -566,3 +566,15 @@ def _occurrence_target(
     if lesson is None or lesson.cell.kind != "lesson":
         raise LookupError("affected ordinary lesson no longer exists")
     return "requirement", lesson.target_ids[0], [occurrence.class_id]
+
+
+def generate_proposals(state: AppState, event: ChangeEvent) -> List[ChangeProposal]:
+    """Public Task 8 orchestration entry point."""
+    from local_optimizer import generate_proposals as _generate_proposals
+
+    return _generate_proposals(state, event)
+
+
+def propose_changes(state: AppState, event: ChangeEvent) -> List[ChangeProposal]:
+    """Compatibility alias used by the implementation plan and API layer."""
+    return generate_proposals(state, event)
