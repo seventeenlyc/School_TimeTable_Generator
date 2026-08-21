@@ -1,9 +1,15 @@
 from datetime import date
 
 from domain import (
+    AppliedChange,
     AppState,
+    ChangeEvent,
+    ChangeEventKind,
+    ChangeEventStatus,
     CourseRequirement,
+    DateException,
     LessonCell,
+    ProposalScore,
     Room,
     SchoolClass,
     Settings,
@@ -11,8 +17,10 @@ from domain import (
     SplitCourseGroup,
     Subject,
     Teacher,
+    TeacherSubstitution,
     TimetableVersion,
 )
+from validation import rebuild_resource_indexes
 
 
 WORKING_DAYS = 6
@@ -158,3 +166,113 @@ def place_split(version, block, weekday, period):
             kind="split",
             split_block_id=block.id,
         )
+
+
+def make_versioned_state():
+    state, version = make_two_class_state()
+    place_lesson(version, "class-1", 0, 0, "req-class1-math")
+    place_lesson(version, "class-2", 0, 1, "req-class2-math-same-teacher")
+    place_lesson(version, "class-1", 0, 2, "req-class1-chinese")
+    place_lesson(version, "class-2", 0, 3, "req-class2-chinese")
+    place_lesson(version, "class-1", 1, 0, "req-class1-math")
+    place_lesson(version, "class-2", 1, 1, "req-class2-math-same-teacher")
+    place_lesson(version, "class-1", 1, 2, "req-class1-chinese")
+    place_lesson(version, "class-2", 1, 3, "req-class2-chinese")
+    place_split(version, state.split_course_blocks[0], 2, 0)
+
+    version.id = "version-before"
+    version.effective_from = date(2026, 9, 1)
+    first = rebuild_resource_indexes(state, version)
+    second = first.copy(
+        deep=True,
+        update={
+            "id": "version-after",
+            "name": "Second version",
+            "effective_from": date(2026, 9, 7),
+            "parent_version_id": first.id,
+        },
+    )
+    state.timetable_versions = [second, first]
+    return state, first, second
+
+
+def make_state_with_substitution_exception():
+    exception_date = date(2026, 9, 8)
+    requirement = CourseRequirement(
+        id="req-class1-math",
+        class_id="class-1",
+        subject_id="subject-math",
+        teacher_id="teacher-original",
+        periods_per_week=1,
+        room_id="room-101",
+    )
+    state = AppState(
+        settings=Settings(periods_per_day=PERIODS_PER_DAY),
+        teachers=[
+            Teacher(
+                id="teacher-original",
+                name="Original teacher",
+                qualified_subject_ids=["subject-math"],
+                teaching_assignment_ids=[requirement.id],
+            ),
+            Teacher(
+                id="teacher-substitute",
+                name="Substitute teacher",
+                qualified_subject_ids=["subject-math"],
+            ),
+        ],
+        classes=[SchoolClass(id="class-1", name="Class 1")],
+        subjects=[Subject(id="subject-math", name="Math")],
+        rooms=[Room(id="room-101", name="Room 101")],
+        course_requirements=[requirement],
+    )
+    version = TimetableVersion(
+        id="version-base",
+        name="Base version",
+        effective_from=date(2026, 9, 1),
+        class_schedules={"class-1": _empty_schedule()},
+    )
+    place_lesson(version, "class-1", 1, 0, requirement.id)
+    version = rebuild_resource_indexes(state, version)
+    state.timetable_versions = [version]
+    state.applied_changes = [
+        AppliedChange(
+            id="change-substitution",
+            event=ChangeEvent(
+                id="event-absence",
+                kind=ChangeEventKind.ABSENCE,
+                teacher_id="teacher-original",
+                start_date=exception_date,
+                end_date=exception_date,
+                status=ChangeEventStatus.PROCESSED,
+            ),
+            proposal_id="proposal-substitution",
+            base_version_id=version.id,
+            strategy="same-slot substitution",
+            score=ProposalScore(
+                strategy_tier=0,
+                changed_cells=0,
+                affected_classes=1,
+                affected_teachers=2,
+                moved_split_blocks=0,
+                slot_distance=0,
+            ),
+            operations=[],
+            date_exceptions=[
+                DateException(
+                    date=exception_date,
+                    teacher_substitutions=[
+                        TeacherSubstitution(
+                            date=exception_date,
+                            period=0,
+                            target_kind="requirement",
+                            target_id=requirement.id,
+                            original_teacher_id="teacher-original",
+                            substitute_teacher_id="teacher-substitute",
+                        )
+                    ],
+                )
+            ],
+        )
+    ]
+    return state
