@@ -13,6 +13,7 @@ from domain import (
     Room,
     SchoolClass,
     Settings,
+    Slot,
     SplitCourseBlock,
     SplitCourseGroup,
     Subject,
@@ -166,6 +167,69 @@ def place_split(version, block, weekday, period):
             kind="split",
             split_block_id=block.id,
         )
+
+
+def make_generation_state():
+    state, _ = make_two_class_state()
+    math_teacher = next(
+        teacher for teacher in state.teachers if teacher.id == "teacher-li"
+    )
+    math_teacher.weekly_unavailable_slots = [Slot(weekday=0, period=0)]
+    state.teachers = [
+        math_teacher,
+        *(teacher for teacher in state.teachers if teacher.id != math_teacher.id),
+    ]
+    state.timetable_versions = []
+    return state
+
+
+def make_impossible_room_state():
+    room_id = "room-shared"
+    requirements = [
+        CourseRequirement(
+            id="req-class1-math",
+            class_id="class-1",
+            subject_id="subject-math",
+            teacher_id="teacher-li",
+            room_id=room_id,
+            periods_per_week=6,
+        ),
+        CourseRequirement(
+            id="req-class2-chinese",
+            class_id="class-2",
+            subject_id="subject-chinese",
+            teacher_id="teacher-chen",
+            room_id=room_id,
+            periods_per_week=6,
+        ),
+    ]
+    return AppState(
+        settings=Settings(periods_per_day=1),
+        teachers=[
+            Teacher(
+                id="teacher-li",
+                name="Li",
+                qualified_subject_ids=["subject-math"],
+                teaching_assignment_ids=["req-class1-math"],
+            ),
+            Teacher(
+                id="teacher-chen",
+                name="Chen",
+                qualified_subject_ids=["subject-chinese"],
+                teaching_assignment_ids=["req-class2-chinese"],
+            ),
+        ],
+        classes=[
+            SchoolClass(id="class-1", name="Class 1"),
+            SchoolClass(id="class-2", name="Class 2"),
+        ],
+        subjects=[
+            Subject(id="subject-math", name="Math"),
+            Subject(id="subject-chinese", name="Chinese"),
+        ],
+        rooms=[Room(id=room_id, name="Shared room")],
+        course_requirements=requirements,
+    )
 
 
 def make_versioned_state():
