@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { fetchWithAuth } from "../../../utils/fetchWithAuth";
-import { useAuth, useUser } from "@clerk/clerk-react";
+const useAuth = () => ({ getToken: async () => "" });
+const useUser = () => ({ user: { id: "local-user" } });
 import toast from "react-hot-toast";
 import { ArrowLeft, Save, RotateCcw, HelpCircle } from "lucide-react";
 import WizardSteps from "../../components/WizardSteps";

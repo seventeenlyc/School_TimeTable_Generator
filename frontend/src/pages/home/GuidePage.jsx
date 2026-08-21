@@ -22,12 +22,12 @@ const NAV_SECTIONS = [
 ];
 
 const TECH_STACK = [
-  { label: "Frontend", value: "React" },
-  { label: "Authentication", value: "Clerk" },
+  { label: "Frontend", value: "React + Tailwind CSS" },
+  { label: "Architecture", value: "Pure Local-First (Offline Desktop)" },
   { label: "Backend", value: "FastAPI (Python)" },
-  { label: "Database", value: "MongoDB" },
-  { label: "Timetable Engine", value: "Google OR-Tools · CP Solver" },
-  { label: "Deployment", value: "Render" },
+  { label: "Storage", value: "Atomic JSON Repository (Auto Backup)" },
+  { label: "Timetable Engine", value: "Google OR-Tools · CP-SAT Solver" },
+  { label: "Change Agent", value: "Deterministic Substitute & Swap Agent" },
 ];
 
 const INPUT_CARDS = [
