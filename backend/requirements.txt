@@ -1,19 +1,4 @@
-# Core FastAPI dependencies
 fastapi==0.111.0
 uvicorn==0.30.1
-pydantic==1.10.19         # ✅ Fixes python 3.12 compatibility while avoiding v2 build issues
-python-multipart==0.0.9
-
-# Constraint Programming / Optimization
-ortools==9.14.6206        # ✅ Confirmed working version on PyPI
-
-# Database dependencies
-pymongo==4.7.2            # ✅ Avoid extras like [srv]; full URI works anyway
-python-dotenv==1.0.1
-
-# Timezone handling
-pytz==2024.1
-
-# Optional (used locally only, not needed on Render)
-# pytest==8.2.1
-# pytest-asyncio==0.23.5
+pydantic==1.10.19
+ortools==9.14.6206
