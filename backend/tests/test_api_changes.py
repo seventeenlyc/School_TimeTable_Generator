@@ -1,16 +1,23 @@
+import copy
 from datetime import date, timedelta
+import json
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from domain import (
-    DateSlot,
+    CellOverride,
     ChangeEvent,
     ChangeEventKind,
+    ChangeOperation,
     ChangeProposal,
+    DateException,
+    DateSlot,
+    LessonCell,
     ProposalScore,
 )
+import server
 from server import create_app
 from tests.factories import (
     make_conflict_free_requirements,
@@ -162,6 +169,28 @@ def test_tampered_proposal_is_rejected(tmp_path):
     assert apply_res.status_code in (404, 422)
 
 
+def test_same_size_tampered_proposal_is_rejected_without_mutation(tmp_path):
+    client = _client_with_generated_timetable(tmp_path)
+    prop_res = client.post("/api/change-proposals", json=_absence_payload())
+    proposal = prop_res.json()["proposals"][0]
+
+    state_before = client.get("/api/state").json()
+    rev_before = state_before["revision"]
+    applied_changes_len_before = len(state_before["applied_changes"])
+
+    tampered = copy.deepcopy(proposal)
+    tampered["id"] = "tampered-proposal-id"
+    tampered["explanation"] = "tampered explanation"
+    tampered["operations"][0]["after_label"] = "tampered operation"
+
+    apply_res = client.post("/api/changes/apply", json={"proposal": tampered})
+    assert apply_res.status_code == 422
+
+    state_after = client.get("/api/state").json()
+    assert state_after["revision"] == rev_before
+    assert len(state_after["applied_changes"]) == applied_changes_len_before
+
+
 def test_list_applied_changes_endpoint(tmp_path):
     client = _client_with_generated_timetable(tmp_path)
 
@@ -200,3 +229,91 @@ def test_calendar_day_endpoint(tmp_path):
     # 3. Date before timetable starts
     res_before = client.get("/api/calendar/day?date=2025-01-01")
     assert res_before.status_code == 404
+
+
+def test_apply_change_rejects_resolved_real_date_conflict(tmp_path, monkeypatch):
+    client = _client_with_generated_timetable(tmp_path)
+
+    # Verify baseline schedule for 2026-09-07 Monday period 0 has C-1 taking REQ-C1-MATH in R-101
+    day_res = client.get("/api/calendar/day?date=2026-09-07")
+    assert day_res.status_code == 200
+    day_data = day_res.json()
+    c1_lessons = day_data["class_schedules"]["C-1"]
+    assert c1_lessons[0] is not None
+    assert c1_lessons[0]["cell"]["kind"] == "lesson"
+    assert c1_lessons[0]["cell"]["requirement_id"] == "REQ-C1-MATH"
+
+    state_before = client.get("/api/state").json()
+    rev_before = state_before["revision"]
+    base_version_id = state_before["timetable_versions"][0]["id"]
+    applied_before_count = len(state_before["applied_changes"])
+
+    # Construct a well-typed ChangeProposal that causes room R-101 double booking on 2026-09-07 period 0:
+    # C-1 has REQ-C1-MATH (room R-101) and override places REQ-C1-PHYS (room R-101) in C-2 at period 0.
+    proposal = ChangeProposal(
+        id="prop-room-conflict-1",
+        base_revision=rev_before,
+        base_version_id=base_version_id,
+        event=ChangeEvent(
+            id="evt-busy-test-1",
+            teacher_id="T-ZHANG",
+            kind=ChangeEventKind.BUSY,
+            busy_slots=[DateSlot(date=date(2026, 9, 7), period=0)],
+            reason="Test room conflict",
+        ),
+        strategy="slot_swap_same_day",
+        explanation="Test proposal creating room double-booking on resolved day",
+        score=ProposalScore(
+            strategy_tier=1,
+            changed_cells=1,
+            affected_classes=1,
+            affected_teachers=1,
+            moved_split_blocks=0,
+            slot_distance=0,
+        ),
+        operations=[
+            ChangeOperation(
+                date=date(2026, 9, 7),
+                period=0,
+                class_ids=["C-2"],
+                kind="swap",
+                before_label="Empty",
+                after_label="REQ-C1-PHYS",
+            )
+        ],
+        date_exceptions=[
+            DateException(
+                date=date(2026, 9, 7),
+                cell_overrides=[
+                    CellOverride(
+                        date=date(2026, 9, 7),
+                        class_id="C-2",
+                        period=0,
+                        before=None,
+                        after=LessonCell(
+                            kind="lesson",
+                            requirement_id="REQ-C1-PHYS",
+                        ),
+                    )
+                ],
+                teacher_substitutions=[],
+            )
+        ],
+        version_candidate=None,
+    )
+
+    # Monkeypatch server.propose_changes to return this canonical proposal
+    monkeypatch.setattr(server, "propose_changes", lambda state, event: [proposal])
+
+    # POST /api/changes/apply expecting 422
+    apply_res = client.post("/api/changes/apply", json={"proposal": json.loads(proposal.json())})
+    assert apply_res.status_code == 422
+    assert apply_res.json()["detail"]["code"] in (
+        "resolved_schedule_conflict",
+        "date_exception_invalid",
+    )
+
+    # Assert state revision and applied_changes count remain completely unchanged
+    state_after = client.get("/api/state").json()
+    assert state_after["revision"] == rev_before
+    assert len(state_after["applied_changes"]) == applied_before_count

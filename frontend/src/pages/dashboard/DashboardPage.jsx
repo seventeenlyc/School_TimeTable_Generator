@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { api } from "../../api/client";
 import RecoveryPanel from "./RecoveryPanel";
 import {
@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 
 export default function DashboardPage() {
-  const navigate = useNavigate();
   const [state, setState] = useState(null);
   const [timetables, setTimetables] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -230,7 +229,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Link
-                    to={`/display/${t.id}`}
+                    to={`/timetables/${t.id}`}
                     className="px-3.5 py-1.5 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/40 text-cyan-300 text-xs font-semibold rounded-lg transition-all"
                   >
                     查看课表

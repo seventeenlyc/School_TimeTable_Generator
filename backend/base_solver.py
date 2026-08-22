@@ -93,8 +93,16 @@ def generate_base_timetable(
     for variables in room_variables.values():
         model.Add(sum(variables) <= 1)
 
+    for requirement in state.course_requirements:
+        for slot in requirement.fixed_slots:
+            if (
+                0 <= slot.weekday < state.settings.working_days
+                and 0 <= slot.period < state.settings.periods_per_day
+            ):
+                model.Add(normal[(requirement.id, slot.weekday, slot.period)] == 1)
+
     _add_unavailability_constraints(model, state, normal, split)
-    _add_daily_subject_constraints(model, state, normal)
+    _add_daily_subject_constraints(model, state, normal, split)
     penalties = _add_soft_objective_terms(
         model,
         state,
@@ -291,6 +299,7 @@ def _add_daily_subject_constraints(
     model: cp_model.CpModel,
     state: AppState,
     normal: Dict[VariableKey, cp_model.IntVar],
+    split: Dict[VariableKey, cp_model.IntVar],
 ) -> None:
     requirements_by_subject: DefaultDict[
         Tuple[str, str], List[CourseRequirement]
@@ -305,6 +314,16 @@ def _add_daily_subject_constraints(
             variables = [
                 normal[(requirement.id, day, period)]
                 for requirement in requirements
+                for period in range(state.settings.periods_per_day)
+            ]
+            model.Add(
+                sum(variables) <= state.settings.max_daily_subject_periods
+            )
+
+    for block in state.split_course_blocks:
+        for day in range(state.settings.working_days):
+            variables = [
+                split[(block.id, day, period)]
                 for period in range(state.settings.periods_per_day)
             ]
             model.Add(

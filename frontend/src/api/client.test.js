@@ -2,63 +2,72 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { api } from "./client";
 
 describe("api client", () => {
+  const mockAppState = { revision: 2, timetable_versions: [] };
+
   beforeEach(() => {
-    global.fetch = vi.fn();
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockAppState,
+    });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("getState calls /api/state", async () => {
-    const mockState = { revision: 1, classes: [] };
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockState,
-    });
+  it("createChildVersion sends POST to same-origin /api/timetables/:id/versions and returns AppState unchanged", async () => {
+    const payload = { branch_name: "draft-1", notes: "testing" };
+    const result = await api.createChildVersion("ver 1", payload);
 
-    const result = await api.getState();
-    expect(global.fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:8000/api/state",
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/timetables/ver%201/versions",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify(payload),
+      })
+    );
+    expect(result).toEqual(mockAppState);
+  });
+
+  it("getCalendarDay sends GET request to same-origin /api/calendar/day?date=2026-09-08", async () => {
+    const result = await api.getCalendarDay("2026-09-08");
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/calendar/day?date=2026-09-08",
       expect.objectContaining({
         headers: expect.objectContaining({
           "Content-Type": "application/json",
         }),
       })
     );
-    expect(result).toEqual(mockState);
+    expect(result).toEqual(mockAppState);
   });
 
-  it("proposeChange sends event payload to /api/change-proposals", async () => {
-    const mockProposals = { base_revision: 1, proposals: [] };
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockProposals,
-    });
-
-    const event = { id: "evt_1", event_type: "absence", teacher_id: "T1" };
-    const result = await api.proposeChange(event);
-
-    expect(global.fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:8000/api/change-proposals",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ event }),
-      })
-    );
-    expect(result).toEqual(mockProposals);
-  });
-
-  it("handles non-ok response throwing error with status and payload", async () => {
-    global.fetch.mockResolvedValueOnce({
+  it("normalizes structured validation errors without object stringification", async () => {
+    globalThis.fetch.mockResolvedValueOnce({
       ok: false,
-      status: 409,
-      json: async () => ({ detail: { code: "revision_conflict", message: "conflict" } }),
+      status: 422,
+      json: async () => ({
+        detail: {
+          code: "schedule_validation_failed",
+          errors: [{
+            code: "teacher_double_booked",
+            message: "Teacher has multiple assignments in one slot",
+            entity_ids: ["version-1", "teacher-1"],
+            weekday: 2,
+            period: 1,
+          }],
+        },
+      }),
     });
 
-    await expect(api.updateSettings({})).rejects.toMatchObject({
-      status: 409,
-      message: "conflict",
+    await expect(api.updateCatalog({})).rejects.toMatchObject({
+      status: 422,
+      message: expect.stringContaining("教师同一时间被安排了多门课程"),
+      details: [expect.objectContaining({ code: "teacher_double_booked" })],
     });
   });
 });

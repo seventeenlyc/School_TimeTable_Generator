@@ -1,5 +1,5 @@
 import React from "react";
-import { Sparkles, CheckCircle2, ShieldAlert, ArrowRight, Award } from "lucide-react";
+import { CheckCircle2, ShieldAlert, ArrowRight, Award } from "lucide-react";
 
 export default function ProposalCard({
   proposal,
@@ -7,14 +7,18 @@ export default function ProposalCard({
   onSelect,
   isRecommended = false,
 }) {
-  const { strategy, summary, score, operations = [], warnings = [] } = proposal;
+  const { strategy, explanation, score, operations = [], warnings = [] } = proposal;
 
   const getStrategyBadge = (strat) => {
     switch (strat) {
+      case "absence_same_slot_substitute":
+      case "busy_same_slot_substitute":
       case "direct_substitution":
         return <span className="px-2.5 py-1 rounded bg-amber-500/20 text-amber-300 text-xs font-semibold">同科代课策略</span>;
+      case "busy_class_swap":
       case "direct_swap":
         return <span className="px-2.5 py-1 rounded bg-blue-500/20 text-blue-300 text-xs font-semibold">班内换课策略</span>;
+      case "cp_sat_local":
       case "cpsat_local":
         return <span className="px-2.5 py-1 rounded bg-purple-500/20 text-purple-300 text-xs font-semibold">CP-SAT 局部重排</span>;
       case "long_term_version":
@@ -47,14 +51,28 @@ export default function ProposalCard({
         </div>
 
         {score && (
-          <div className="text-xs text-slate-400 font-mono">
-            综合代价评分: <span className="text-emerald-400 font-bold">{score.total_cost}</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono">
+            {score.changed_cells !== undefined && (
+              <span>变动格 {score.changed_cells}</span>
+            )}
+            {score.affected_classes !== undefined && (
+              <span>影响班级 {score.affected_classes}</span>
+            )}
+            {score.affected_teachers !== undefined && (
+              <span>影响教师 {score.affected_teachers}</span>
+            )}
+            {score.slot_distance !== undefined && (
+              <span>调整距离 {score.slot_distance}</span>
+            )}
+            {score.moved_split_blocks !== undefined && (
+              <span>混班移动 {score.moved_split_blocks}</span>
+            )}
           </div>
         )}
       </div>
 
-      {/* Summary */}
-      <p className="text-sm text-slate-200 font-medium mb-4">{summary}</p>
+      {/* Explanation */}
+      <p className="text-sm text-slate-200 font-medium mb-4">{explanation}</p>
 
       {/* Warnings */}
       {warnings.length > 0 && (
@@ -80,9 +98,17 @@ export default function ProposalCard({
                 key={opIdx}
                 className="p-2.5 rounded-lg bg-slate-800/60 border border-slate-700/50 flex items-center justify-between gap-3"
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono text-slate-400">{op.date}</span>
-                  <span className="text-slate-300 font-medium">{op.description || op.summary}</span>
+                  {op.before_label && (
+                    <span className="text-slate-300 font-medium">{op.before_label}</span>
+                  )}
+                  {op.before_label && op.after_label && (
+                    <ArrowRight size={13} className="text-slate-500 shrink-0" />
+                  )}
+                  {op.after_label && (
+                    <span className="text-slate-300 font-medium">{op.after_label}</span>
+                  )}
                 </div>
                 <div className="text-slate-400 flex items-center gap-1 shrink-0">
                   <span className="text-slate-500 font-mono">

@@ -9,11 +9,11 @@ export function buildEvent({
   if (!teacherId) {
     throw new Error("请选择教师");
   }
-  if (!startDate) {
-    throw new Error("请选择开始日期");
-  }
 
   if (kind === "absence") {
+    if (!startDate) {
+      throw new Error("请选择开始日期");
+    }
     const finalEnd = endDate || startDate;
     if (new Date(finalEnd) < new Date(startDate)) {
       throw new Error("结束日期不能早于开始日期");
@@ -37,12 +37,12 @@ export function buildEvent({
     return {
       kind: "busy",
       teacher_id: teacherId,
-      start_date: startDate,
-      end_date: endDate || startDate,
+      start_date: null,
+      end_date: null,
       reason: reason || "教师临时有事/繁忙",
       busy_slots: busySlots.map((s) => ({
         date: s.date,
-        period: parseInt(s.period),
+        period: parseInt(s.period, 10),
       })),
     };
   }

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../../api/client";
 import { buildScheduleIndexes, applyCellMove } from "../../domain/schedule";
 import ScheduleGrid from "../../components/ScheduleGrid";
+import AsyncButton from "../../components/AsyncButton";
 import { ArrowLeft, Save, AlertCircle, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -19,11 +20,7 @@ export default function EditTimetablePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, [id]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const appState = await api.getState();
@@ -47,7 +44,11 @@ export default function EditTimetablePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, navigate]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleCellClick = ({ day, period }) => {
     if (!selectedSlot) {
@@ -94,8 +95,31 @@ export default function EditTimetablePage() {
       };
 
       const result = await api.createChildVersion(baseVersion.id, payload);
+      const versions = result?.timetable_versions || [];
+      const matches = versions.filter(
+        (v) =>
+          v.parent_version_id === baseVersion.id &&
+          v.name === payload.name &&
+          v.effective_from === payload.effective_from &&
+          v.id !== baseVersion.id
+      );
+
+      if (!matches.length) {
+        throw new Error("未找到新创建的课表版本");
+      }
+
+      matches.sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (timeB !== timeA) {
+          return timeB - timeA;
+        }
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      });
+
+      const child = matches[0];
       toast.success("已成功创建新课表版本！");
-      navigate(`/timetables/${result.id || id}`);
+      navigate(`/timetables/${child.id}`);
     } catch (err) {
       toast.error(err.message || "保存新版本失败");
     } finally {
@@ -137,14 +161,15 @@ export default function EditTimetablePage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
+          <AsyncButton
             onClick={handleSave}
             disabled={saving}
+            loading={saving}
+            loadingLabel="正在创建…"
             className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium shadow-lg shadow-emerald-900/30 transition-all disabled:opacity-50"
           >
-            <Save size={16} />
-            {saving ? "正在创建..." : "保存为新版本"}
-          </button>
+            <Save size={16} /> 保存为新版本
+          </AsyncButton>
         </div>
       </div>
 

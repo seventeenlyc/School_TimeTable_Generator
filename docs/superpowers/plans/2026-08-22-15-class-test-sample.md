@@ -15,7 +15,7 @@
 - Work on the existing `feat/local-timetable-agent` branch and preserve all unrelated dirty/staged user changes.
 - Persist data only as schema version 1 JSON; `fixed_slots` must default to an empty list for old files.
 - The school week is Monday–Saturday with eight periods per day; periods 1–5 are morning and 6–8 are afternoon.
-- The demo uses exactly 15 classes, 17 rooms, three PE teachers with five classes each, and every non-PE teacher serves no more than two distinct classes.
+- The demo uses exactly 15 classes, 17 rooms, and three PE teachers with five classes each. Ordinary teachers are grouped by adjacent classes only to keep the sample deterministic and readable; this is not a product restriction, and operators may assign any number of classes to one teacher.
 - Academic requirements have six periods per week and at most one occurrence per day; PE has two periods per week; homeroom class meeting is fixed at Monday period 8.
 - Classes 14 and 15 share one six-period geography/politics split block using rooms 301 and 302.
 - Empty class cells remain `null` in JSON and display as “自习”.
@@ -266,9 +266,9 @@ def test_demo_teacher_loads():
     pe_requirements = [r for r in state.course_requirements if r.subject_id == pe_subject_id]
     loads = Counter(r.teacher_id for r in pe_requirements)
     assert sorted(loads.values()) == [5, 5, 5]
-    assert all(len(class_ids_for_teacher(state, teacher.id)) <= 2
-               for teacher in state.teachers if teacher.id not in loads)
 ```
+
+The sample groups ordinary teachers by adjacent classes for stable, readable allocation. Do not assert a class-count cap: operators may assign any number of classes to one teacher.
 
 Add exact assertions for the class combination counts, 15 unique homeroom teachers, 17 room names, exactly one fixed Monday period-8 meeting per class, and deterministic non-empty unavailability that avoids fixed meeting slots.
 

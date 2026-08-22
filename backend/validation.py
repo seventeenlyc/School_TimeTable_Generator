@@ -155,6 +155,35 @@ def validate_catalog(state: AppState) -> ValidationReport:
                     slot.period,
                 )
 
+    requirements_by_class_subject: Dict[
+        Tuple[str, str], List[CourseRequirement]
+    ] = defaultdict(list)
+    for requirement in state.course_requirements:
+        requirements_by_class_subject[
+            (requirement.class_id, requirement.subject_id)
+        ].append(requirement)
+
+    for (class_id, subject_id), duplicates in requirements_by_class_subject.items():
+        if len(duplicates) < 2:
+            continue
+        teacher_ids = list(dict.fromkeys(item.teacher_id for item in duplicates))
+        code = (
+            "duplicate_course_requirement_teachers"
+            if len(teacher_ids) > 1
+            else "duplicate_course_requirement"
+        )
+        message = (
+            "One class and subject are assigned to different teachers"
+            if len(teacher_ids) > 1
+            else "Course requirement is duplicated for one class and subject"
+        )
+        _error(
+            report,
+            code,
+            message,
+            [class_id, subject_id, *(item.id for item in duplicates), *teacher_ids],
+        )
+
     for requirement in state.course_requirements:
         references = (
             (requirement.class_id, classes, "class"),
@@ -205,6 +234,123 @@ def validate_catalog(state: AppState) -> ValidationReport:
                 "periods_exceed_capacity",
                 "Consecutive lesson length exceeds the configured day",
                 [requirement.id],
+            )
+
+        # Fixed slots validation
+        seen_fixed_slots: Set[Tuple[int, int]] = set()
+        has_duplicate_fixed_slot = False
+        for slot in requirement.fixed_slots:
+            slot_key = (slot.weekday, slot.period)
+            if slot_key in seen_fixed_slots:
+                has_duplicate_fixed_slot = True
+            seen_fixed_slots.add(slot_key)
+
+            if (
+                slot.weekday < 0
+                or slot.weekday >= state.settings.working_days
+                or slot.period < 0
+                or slot.period >= state.settings.periods_per_day
+            ):
+                _error(
+                    report,
+                    "slot_out_of_range",
+                    "Course requirement fixed slot exceeds configured school schedule",
+                    [requirement.id],
+                    slot.weekday,
+                    slot.period,
+                )
+
+        if has_duplicate_fixed_slot:
+            _error(
+                report,
+                "duplicate_fixed_slot",
+                "Course requirement contains duplicate fixed slots",
+                [requirement.id],
+            )
+
+        if len(requirement.fixed_slots) > requirement.periods_per_week:
+            _error(
+                report,
+                "fixed_slot_count",
+                "Course requirement fixed slots count exceeds periods per week",
+                [requirement.id],
+            )
+
+        if requirement.consecutive_periods != 1 and requirement.fixed_slots:
+            _error(
+                report,
+                "fixed_slot_consecutive",
+                "Fixed slots are only supported for courses with consecutive_periods = 1",
+                [requirement.id],
+            )
+
+        if teacher is not None and requirement.fixed_slots:
+            unavailable_set = {
+                (s.weekday, s.period) for s in teacher.weekly_unavailable_slots
+            }
+            for slot in requirement.fixed_slots:
+                if (slot.weekday, slot.period) in unavailable_set:
+                    _error(
+                        report,
+                        "fixed_slot_unavailable",
+                        "Course requirement fixed slot falls on teacher unavailable slot",
+                        [requirement.id, teacher.id],
+                        slot.weekday,
+                        slot.period,
+                    )
+
+    # Fixed slot conflicts across requirements: class, teacher, room
+    class_fixed_slots: Dict[Tuple[str, int, int], List[str]] = defaultdict(list)
+    teacher_fixed_slots: Dict[Tuple[str, int, int], List[str]] = defaultdict(list)
+    room_fixed_slots: Dict[Tuple[str, int, int], List[str]] = defaultdict(list)
+
+    for requirement in state.course_requirements:
+        unique_fixed_slots = {
+            (slot.weekday, slot.period) for slot in requirement.fixed_slots
+        }
+        for weekday, period in unique_fixed_slots:
+            class_fixed_slots[(requirement.class_id, weekday, period)].append(
+                requirement.id
+            )
+            teacher_fixed_slots[(requirement.teacher_id, weekday, period)].append(
+                requirement.id
+            )
+            if requirement.room_id:
+                room_fixed_slots[(requirement.room_id, weekday, period)].append(
+                    requirement.id
+                )
+
+    for (class_id, weekday, period), req_ids in class_fixed_slots.items():
+        if len(req_ids) > 1:
+            _error(
+                report,
+                "fixed_slot_conflict",
+                f"Multiple course requirements conflict on class {class_id} at weekday {weekday}, period {period}",
+                [class_id, *req_ids],
+                weekday,
+                period,
+            )
+
+    for (teacher_id, weekday, period), req_ids in teacher_fixed_slots.items():
+        if len(req_ids) > 1:
+            _error(
+                report,
+                "fixed_slot_conflict",
+                f"Multiple course requirements conflict on teacher {teacher_id} at weekday {weekday}, period {period}",
+                [teacher_id, *req_ids],
+                weekday,
+                period,
+            )
+
+    for (room_id, weekday, period), req_ids in room_fixed_slots.items():
+        if len(req_ids) > 1:
+            _error(
+                report,
+                "fixed_slot_conflict",
+                f"Multiple course requirements conflict on room {room_id} at weekday {weekday}, period {period}",
+                [room_id, *req_ids],
+                weekday,
+                period,
             )
 
     for block in state.split_course_blocks:
@@ -502,7 +648,9 @@ def validate_timetable_version(
     _validate_teacher_availability(report, teachers, teacher_occupancy)
     _validate_split_blocks(report, blocks, split_references)
     _validate_requirement_counts(report, state, requirement_counts)
+    _validate_fixed_slots(report, state, requirement_slots)
     _validate_daily_subject_limits(report, state, daily_subject_counts)
+    _validate_split_daily_subject_limits(report, state, split_references)
     _validate_consecutive_periods(
         report,
         state.course_requirements,
@@ -661,6 +809,25 @@ def _validate_requirement_counts(report, state, requirement_counts) -> None:
             )
 
 
+def _validate_fixed_slots(report, state, requirement_slots) -> None:
+    for requirement in state.course_requirements:
+        assigned = set(requirement_slots.get(requirement.id, []))
+        for slot in requirement.fixed_slots:
+            if (
+                0 <= slot.weekday < state.settings.working_days
+                and 0 <= slot.period < state.settings.periods_per_day
+            ):
+                if (slot.weekday, slot.period) not in assigned:
+                    _error(
+                        report,
+                        "missing_fixed_slot",
+                        "Fixed slot requirement is not satisfied",
+                        [requirement.id, requirement.class_id, requirement.subject_id],
+                        slot.weekday,
+                        slot.period,
+                    )
+
+
 def _validate_daily_subject_limits(report, state, daily_subject_counts) -> None:
     limit = state.settings.max_daily_subject_periods
     for (class_id, weekday, subject_id), count in daily_subject_counts.items():
@@ -672,6 +839,25 @@ def _validate_daily_subject_limits(report, state, daily_subject_counts) -> None:
                 [class_id, subject_id],
                 weekday,
             )
+
+
+def _validate_split_daily_subject_limits(report, state, split_references) -> None:
+    limit = state.settings.max_daily_subject_periods
+    for block in state.split_course_blocks:
+        by_class = split_references.get(block.id, {})
+        slots = set().union(*by_class.values()) if by_class else set()
+        slots_by_day = defaultdict(int)
+        for weekday, period in slots:
+            slots_by_day[weekday] += 1
+        for weekday, count in slots_by_day.items():
+            if count > limit:
+                _error(
+                    report,
+                    "split_daily_subject_limit",
+                    f"Daily split block count {count} exceeds the limit {limit}",
+                    [block.id],
+                    weekday,
+                )
 
 
 def _validate_consecutive_periods(

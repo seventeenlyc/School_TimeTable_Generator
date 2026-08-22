@@ -57,7 +57,7 @@ export default function ScheduleGrid({
                   >
                     {formatted.kind === "empty" ? (
                       <div className="h-16 flex items-center justify-center text-xs text-slate-600 font-mono">
-                        空课
+                        自习
                       </div>
                     ) : formatted.kind === "split" ? (
                       <div className="min-h-16 p-2 rounded-lg bg-indigo-950/40 border border-indigo-500/30 flex flex-col justify-between text-left">

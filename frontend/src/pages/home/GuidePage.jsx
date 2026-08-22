@@ -5,161 +5,198 @@ import {
   BookOpen,
   CalendarDays,
   Code2,
-  Download,
   BarChart2,
   CheckCircle2,
   ChevronDown,
+  Layers,
+  Bot,
+  Database,
+  CalendarRange,
 } from "lucide-react";
 import SideRays from "../components/SideRays";
 import BorderGlow from "../components/BorderGlow";
 
 const NAV_SECTIONS = [
-  { id: "tech-stack", label: "Tech Stack" },
-  { id: "inputs", label: "What You Input" },
-  { id: "workflow", label: "Workflow" },
-  { id: "logic", label: "Generation Logic" },
-  { id: "post-gen", label: "Post-Generation" },
+  { id: "tech-stack", label: "技术架构" },
+  { id: "inputs", label: "输入数据" },
+  { id: "workflow", label: "工作流程" },
+  { id: "logic", label: "排课算法逻辑" },
+  { id: "agent-rules", label: "Agent 智能调代课" },
+  { id: "post-gen", label: "排课后与运维" },
 ];
 
 const TECH_STACK = [
-  { label: "Frontend", value: "React + Tailwind CSS" },
-  { label: "Architecture", value: "Pure Local-First (Offline Desktop)" },
-  { label: "Backend", value: "FastAPI (Python)" },
-  { label: "Storage", value: "Atomic JSON Repository (Auto Backup)" },
-  { label: "Timetable Engine", value: "Google OR-Tools · CP-SAT Solver" },
-  { label: "Change Agent", value: "Deterministic Substitute & Swap Agent" },
+  { label: "前端框架", value: "React + Tailwind CSS" },
+  { label: "运行架构", value: "单机离线运行（免登录、零云端依赖）" },
+  { label: "后端服务", value: "FastAPI (Python) · 本地 127.0.0.1:8001" },
+  { label: "数据存储", value: "本机 JSON 持久化（带自动版本备份机制）" },
+  { label: "排课引擎", value: "Google OR-Tools · CP-SAT 约束求解器" },
+  { label: "智能调代课", value: "确定性规则引擎 + Agent 智能决策助手" },
 ];
 
 const INPUT_CARDS = [
   {
     icon: Settings,
-    title: "General Settings",
-    summary: "Timetable title, working days per week, periods per day.",
+    title: "基础设置",
+    summary: "课表名称、固定周一到周六教学天数、每日节次与真实生效日期。",
     detail:
-      "Configure the core structure of your timetable — give it a name, set how many days a week your school operates, and define the number of teaching periods in each day.",
+      "配置课表核心结构：固定周一到周六教学周期、每日节次总数（1-20节），以及配置真实生效起始日期；数据完全保存在本机 JSON 文件中，无需账号登录。",
   },
   {
     icon: Users,
-    title: "Classes",
-    summary: "List of class names — e.g. XA, XB, XIA.",
+    title: "班级与走班",
+    summary: "行政班配置与同步走班组（如1班/2班地理政治同步走班）。",
     detail:
-      "Define every class that needs a timetable. The system generates independent, conflict-free schedules for each one.",
+      "定义所有参与排课的班级与走班组合。典型示例：高一(1)班与高一(2)班配置地理、政治同步走班，在相同时间段内由对应走班教师并行授课且互不冲突。",
   },
   {
     icon: BookOpen,
-    title: "Teachers",
-    summary: "Name, subjects per class, base class, lab subjects.",
+    title: "教师与课程",
+    summary: "教师姓名、任教学科与班级、班主任归属、专用实验连堂。",
     detail:
-      "Specify each teacher's name, which subjects they handle for which classes, their assigned base class if any, their main subject, and any lab subjects they take.",
+      "精确指定每位教师的姓名、任教学科、班主任班级归属，以及需占用专用功能室连续排课的实验/实训课程配置。",
   },
   {
     icon: CalendarDays,
-    title: "Weekly Requirements",
-    summary: "Number of periods per subject per class each week.",
+    title: "周课时要求",
+    summary: "各班级每门学科每周需安排的标准课时数。",
     detail:
-      "Set the exact period count for every subject in every class. The solver enforces these counts precisely — no subject is under- or over-scheduled.",
+      "精确设定每个班级中每门课程的周课时节数。CP-SAT 约束求解器将严格执行该数量，杜绝课时超额或缺漏。",
   },
 ];
 
 const WORKFLOW_STEPS = [
   {
     step: "01",
-    title: "Input Collection",
+    title: "本地数据录入与配置",
     description:
-      "The React frontend collects all settings, class lists, teacher details, and weekly period requirements.",
+      "在前端交互界面中录入排课参数、班级与走班关系、教师及周课时需求，点击保存后写入本机 JSON 文件。",
   },
   {
     step: "02",
-    title: "Data Transmission",
+    title: "结构校验与约束构建",
     description:
-      "Validated data is sent to the FastAPI backend, where it is parsed and prepared for constraint modelling.",
+      "本地 FastAPI 后端对提交参数进行一致性与完整性校验，构建教师-学科-时段的运筹优化约束模型。",
   },
   {
     step: "03",
-    title: "Teacher & Subject Mapping",
+    title: "教师与走班关系拓扑",
     description:
-      "The backend builds an internal map of every valid teacher–subject–class combination to define the solution space.",
+      "后端构建行政班与走班组的拓扑关系矩阵，精准锁定走班同步节次与教师可用时段求解空间。",
   },
   {
     step: "04",
-    title: "Constraint Solver",
+    title: "CP-SAT 约束求解计算",
     description:
-      "Google OR-Tools CP-SAT solver applies all constraints and finds a feasible, optimised timetable assignment.",
+      "基于 Google OR-Tools CP-SAT 求解器综合应用硬约束与优化目标，生成满足硬约束的可行课表并按软目标优化求解。",
   },
   {
     step: "05",
-    title: "Output Generation",
+    title: "多视角课表生成",
     description:
-      "Two views are produced: a class-wise timetable and a teacher-wise timetable, both ready for preview and export.",
+      "自动生成“班级课表”与“教师课表”全景视图，支持按周一至周六时段与真实生效日期动态查看与比对。",
   },
   {
     step: "06",
-    title: "Live Preview & Edit",
+    title: "Agent 智能调代课决策",
     description:
-      "The frontend renders the result in an interactive grid. Changes are validated in real time for conflicts.",
+      "遇教师繁忙或突发缺勤时，Agent 自动评估同科代课与班内换课方案，生成完整对比预览供人工确认。",
   },
   {
     step: "07",
-    title: "Export",
+    title: "确认应用与本地备份",
     description:
-      "Download the finalised timetable as a PDF or Excel file in either view.",
+      "任何调代课方案必须经用户明确点击确认后才会持久化应用，并自动记录版本与生成本地数据备份。",
   },
 ];
 
 const CONSTRAINTS = [
   {
-    title: "Single Slot Rule",
-    description: "A teacher can only be assigned to one class at any given period.",
+    title: "单时段教师唯一性规则",
+    description: "同一时段内，一位教师只能被安排到一个班级（或一组同步走班）授课，杜绝撞课冲突。",
   },
   {
-    title: "Period Count Matching",
+    title: "周课时精准匹配",
     description:
-      "The exact number of weekly periods required for each subject in each class is enforced without deviation.",
+      "严格执行各班级每门课程设定的周总课时要求，不偏差、不少排、不多排。",
   },
   {
-    title: "Daily Subject Cap",
+    title: "学科每日节次上限",
     description:
-      "Any subject may appear at most twice per day in a single class, preventing monotonous scheduling.",
+      "同一班级同一门普通学科每天最多安排两节，防止课程过于集中单调，保障教学规律。",
   },
   {
-    title: "Lab Scheduling",
+    title: "实验课程连堂安排",
     description:
-      "Lab subjects are always scheduled as consecutive double-period blocks to reflect real-world lab requirements.",
+      "实验/实训类学科自动锁定为连续两节连堂排课，并自动协调专用实验室资源冲突。",
   },
   {
-    title: "Class Teacher Priority",
+    title: "班主任首节课优先",
     description:
-      "The class teacher's main subject is given priority for the first period of the day in their assigned class.",
+      "班主任所教授的主要学科优先安排在对应班级每日的第一节课，便于早自习和日常班级管理。",
   },
   {
-    title: "Valid Assignments Only",
+    title: "同步走班协同约束",
     description:
-      "No teacher–subject–class combination that was not explicitly defined in the input can be scheduled.",
+      "支持1班/2班地理政治等同步走班，确保对应班级在同一节次同步开展走班教学，教师资源精准对齐。",
+  },
+];
+
+const AGENT_RULES = [
+  {
+    icon: Bot,
+    title: "教师繁忙：班内换课优先",
+    description:
+      "当教师临时因事繁忙时，Agent 优先在同一行政班内寻找合适学科进行对调（班内换课）；若无法对调，再推荐同科其他教师代课。",
+  },
+  {
+    icon: Users,
+    title: "教师缺勤：同科代课优先",
+    description:
+      "当教师临时缺勤请假时，Agent 优先推荐同学科空闲教师代课；若无可用代课教师，再寻找波及范围最小的跨节次调课方案。",
+  },
+  {
+    icon: Layers,
+    title: "走班课程：代课优先原则",
+    description:
+      "对于 1 班 / 2 班地理政治等同步走班课程，因涉及多班级联动，Agent 优先采用同科代课方案，最大限度避免破坏整体走班节奏。",
+  },
+  {
+    icon: CalendarRange,
+    title: "长期缺勤：版本化持久演进",
+    description:
+      "长期缺勤将生成全新生效课表版本，教师恢复后系统不自动回滚旧课表，需根据教务实际情况明确确认后再行调整。",
+  },
+  {
+    icon: CheckCircle2,
+    title: "严格双重把关：方案预览与人工确认",
+    description:
+      "Agent 给出的任何调代课推荐仅作为方案预览呈现，展示影响节次与冲突比对，必须经教务人员手动确认后方可写入生效。",
   },
 ];
 
 const POST_GEN = [
   {
     icon: Code2,
-    title: "Live Validation & Editing",
+    title: "交互式调课与冲突校验",
     description:
-      "Swap subjects or move periods in the timetable grid. The system instantly flags any conflicts — overlapping teachers, double-booked classes — so every edit stays valid.",
+      "支持在课表视图中通过前端两次点击交换或移动微调节次，保存时由后端进行完整校验教师撞课、班级重课及走班冲突，确保调整合规。",
   },
   {
-    icon: Download,
-    title: "Export Options",
+    icon: Database,
+    title: "本机 JSON 存储与备份恢复",
     description:
-      "Download the timetable as a formatted PDF or an Excel spreadsheet. Both class-wise and teacher-wise views are available for export.",
+      "所有基础配置、排课方案与调代课记录均保存在本机 JSON 文件中；支持本地配置备份与历史恢复，恢复前提供明确二次确认。",
   },
   {
     icon: BarChart2,
-    title: "Insights & Distribution",
+    title: "课表分布与统计分析",
     description:
-      "A visual breakdown of subject and teacher period distribution helps you spot imbalances or missing slots at a glance, before printing or sharing.",
+      "直观呈现教师课时负荷分布、周一至周六教学节次统计与学科覆盖度，辅助教务人员全景把控排课均衡度与空缺时段。",
   },
 ];
 
-function AccordionCard({ icon: Icon, title, summary, detail }) {
+function AccordionCard({ icon: CardIcon, title, summary, detail }) {
   const [open, setOpen] = useState(false);
   return (
     <BorderGlow
@@ -190,7 +227,7 @@ function AccordionCard({ icon: Icon, title, summary, detail }) {
             transition: "all 0.25s ease"
           }}
         >
-          <Icon size={18} />
+          {CardIcon && <CardIcon size={18} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontWeight: 750, color: "#fff", fontSize: 15.5, margin: 0 }}>{title}</p>
@@ -220,7 +257,7 @@ function Section({ id, label, children }) {
   return (
     <section id={id} style={{ scrollMarginTop: 96, paddingTop: 48 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-        <span style={{ fontSize: 11, fontWeight: 850, trackingLetter: "0.15em", color: "#57f1db", textTransform: "uppercase" }}>
+        <span style={{ fontSize: 11, fontWeight: 850, letterSpacing: "0.15em", color: "#57f1db", textTransform: "uppercase" }}>
           {label}
         </span>
         <div style={{ flex: 1, height: 1, background: "rgba(255, 255, 255, 0.04)" }} />
@@ -287,13 +324,13 @@ export default function GuidePage() {
       <div style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", background: "rgba(5, 12, 24, 0.25)" }}>
         <div style={{ maxWidth: 1000, margin: "0 auto", padding: "100px 24px 40px" }}>
           <p style={{ fontSize: 11, fontWeight: 800, color: "#57f1db", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 12, fontFamily: "monospace" }}>
-            [Documentation]
+            [ 系统使用指南 ]
           </p>
           <h1 style={{ fontSize: "clamp(2rem, 4.5vw, 2.75rem)", fontWeight: 900, color: "#fff", letterSpacing: "-0.02em", margin: "0 0 16px", lineHeight: 1.15 }}>
-            How the Timetable Generator Works
+            排课调度系统工作原理
           </h1>
           <p style={{ fontSize: 15, color: "#64748b", maxWidth: 640, lineHeight: 1.6, margin: 0 }}>
-            A complete breakdown of how our system intelligently creates optimised school timetables — from the inputs you provide to the exported schedules you use.
+            全方位解析系统如何智能生成最优学校课程表 —— 从本地基础数据录入、约束规划求解到 Agent 调代课决策与本地数据运维全流程说明。
           </p>
           <div style={{ marginTop: 24, display: "flex", flexWrap: "wrap", gap: 8 }}>
             {NAV_SECTIONS.map(({ id, label }) => (
@@ -327,7 +364,7 @@ export default function GuidePage() {
         <aside style={{ width: 180, flexShrink: 0, paddingTop: 48 }} className="max-lg:hidden">
           <div style={{ position: "sticky", top: 100 }}>
             <p style={{ fontSize: 10, fontWeight: 800, color: "rgba(255,255,255,0.25)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 16 }}>
-              On this page
+              本页导航
             </p>
             <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {NAV_SECTIONS.map(({ id, label }) => {
@@ -364,9 +401,9 @@ export default function GuidePage() {
         {/* Content */}
         <main style={{ flex: 1, minWidth: 0 }}>
           {/* Tech Stack */}
-          <Section id="tech-stack" label="Tech Stack">
+          <Section id="tech-stack" label="技术架构">
             <p style={{ color: "#64748b", marginBottom: 20, fontSize: 14.5, lineHeight: 1.6 }}>
-              Our platform is built on a modern, production-ready stack — each layer chosen for reliability and developer ergonomics.
+              平台基于现代生产级技术栈构建 —— 纯单机离线运行架构，无需登录，数据全部持久化于本地。
             </p>
             <BorderGlow
               borderRadius={16}
@@ -398,9 +435,9 @@ export default function GuidePage() {
           </Section>
 
           {/* Inputs */}
-          <Section id="inputs" label="What You Input">
+          <Section id="inputs" label="输入数据">
             <p style={{ color: "#64748b", marginBottom: 20, fontSize: 14.5, lineHeight: 1.6 }}>
-              Four categories of information define every timetable. Click any card to learn more about what each one covers.
+              排课所需的基础数据包含四个核心维度。数据均保存在本地 JSON 存储中，点击卡片可展开详情。
             </p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
               {INPUT_CARDS.map((card) => (
@@ -410,9 +447,9 @@ export default function GuidePage() {
           </Section>
 
           {/* Workflow */}
-          <Section id="workflow" label="Workflow">
+          <Section id="workflow" label="工作流程">
             <p style={{ color: "#64748b", marginBottom: 24, fontSize: 14.5, lineHeight: 1.6 }}>
-              From the moment you submit your inputs to the moment you download a finished schedule, the system follows seven clean steps.
+              从本地参数配置到课表生成与调代课运维，系统严格遵循标准化、清晰高效的 7 步处理流水线。
             </p>
             <div style={{ position: "relative", padding: "10px 0" }}>
               {/* Spine line */}
@@ -448,9 +485,9 @@ export default function GuidePage() {
           </Section>
 
           {/* Generation Logic */}
-          <Section id="logic" label="Generation Logic">
+          <Section id="logic" label="排课算法逻辑">
             <p style={{ color: "#64748b", marginBottom: 20, fontSize: 14.5, lineHeight: 1.6 }}>
-              At the core of the backend is a <span style={{ fontWeight: 800, color: "#fff" }}>Constraint Programming (CP)</span> model built with Google OR-Tools. Six hard constraints define what a valid timetable looks like.
+              后端核心基于 Google OR-Tools 搭建的 <span style={{ fontWeight: 800, color: "#fff" }}>约束规划 (Constraint Programming, CP)</span> 模型，通过刚性硬约束与走班协同保障课表零冲突。
             </p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14, marginBottom: 24 }}>
               {CONSTRAINTS.map(({ title, description }) => (
@@ -489,10 +526,10 @@ export default function GuidePage() {
               >
                 <div style={{ padding: 20, width: "100%", height: "100%" }}>
                   <p style={{ fontSize: 10.5, fontWeight: 850, color: "#57f1db", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontFamily: "monospace" }}>
-                    Deterministic?
+                    求解确定性
                   </p>
                   <p style={{ fontSize: 13, color: "#d4e4fa", lineHeight: 1.65, margin: 0 }}>
-                    Yes. Given the same inputs, the solver always produces the same timetable. Results only change when you manually edit after generation.
+                    确定。在输入数据和约束条件一致的情况下，求解器每次都会给出一致的排课结果。只有在经人工确认调代课或重新排课时才会更新。
                   </p>
                 </div>
               </BorderGlow>
@@ -507,23 +544,23 @@ export default function GuidePage() {
               >
                 <div style={{ padding: 20, width: "100%", height: "100%" }}>
                   <p style={{ fontSize: 10.5, fontWeight: 850, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontFamily: "monospace" }}>
-                    Auto or Manual?
+                    全自动还是手动排课？
                   </p>
                   <p style={{ fontSize: 13, color: "#64748b", lineHeight: 1.65, margin: 0 }}>
-                    Fully auto-generated. Every period is assigned without manual input, and a dynamic editing UI is available once the result is ready.
+                    全自动智能排课。所有课程节次无需人工干预即可一键自动排好，生成后支持在交互课表界面进行手动微调或借助 Agent 智能调代课。
                   </p>
                 </div>
               </BorderGlow>
             </div>
           </Section>
 
-          {/* Post-Generation */}
-          <Section id="post-gen" label="Post-Generation">
+          {/* Agent Rules */}
+          <Section id="agent-rules" label="Agent 智能调代课">
             <p style={{ color: "#64748b", marginBottom: 20, fontSize: 14.5, lineHeight: 1.6 }}>
-              Once the timetable is generated, three tools help you refine, verify, and distribute it.
+              面对教师繁忙、突发请假或走班调整等复杂日常场景，内置 Agent 遵循明确的业务决策原则，保障教学秩序平稳过渡。
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {POST_GEN.map(({ icon: Icon, title, description }) => (
+              {AGENT_RULES.map(({ icon: RuleIcon, title, description }) => (
                 <BorderGlow
                   key={title}
                   borderRadius={16}
@@ -546,7 +583,48 @@ export default function GuidePage() {
                       alignItems: "center",
                       justifyContent: "center"
                     }}>
-                      <Icon size={18} />
+                      {RuleIcon && <RuleIcon size={18} />}
+                    </div>
+                    <div>
+                      <p style={{ fontWeight: 800, color: "#fff", fontSize: 15.5, margin: "0 0 4px" }}>{title}</p>
+                      <p style={{ fontSize: 13, color: "#64748b", lineHeight: 1.6, margin: 0 }}>{description}</p>
+                    </div>
+                  </div>
+                </BorderGlow>
+              ))}
+            </div>
+          </Section>
+
+          {/* Post-Generation */}
+          <Section id="post-gen" label="排课后与运维">
+            <p style={{ color: "#64748b", marginBottom: 20, fontSize: 14.5, lineHeight: 1.6 }}>
+              课表生成后，系统提供冲突检测、统计分析与本地数据持久化保障，满足学校日常教务精细化运维。
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {POST_GEN.map(({ icon: PostIcon, title, description }) => (
+                <BorderGlow
+                  key={title}
+                  borderRadius={16}
+                  backgroundColor="rgba(10, 18, 36, 0.35)"
+                  glowColor="170 80 50"
+                  style={{
+                    transition: "all 0.2s"
+                  }}
+                  className="hover:border-[#57f1db]/35"
+                >
+                  <div style={{ padding: 20, display: "flex", alignItems: "start", gap: 16, width: "100%", height: "100%" }}>
+                    <div style={{
+                      flexShrink: 0,
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
+                      background: "rgba(87, 241, 219, 0.08)",
+                      color: "#57f1db",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center"
+                    }}>
+                      {PostIcon && <PostIcon size={18} />}
                     </div>
                     <div>
                       <p style={{ fontWeight: 800, color: "#fff", fontSize: 15.5, margin: "0 0 4px" }}>{title}</p>

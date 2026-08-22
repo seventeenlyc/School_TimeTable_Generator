@@ -1,4 +1,7 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+import { normalizeApiError } from "./errors";
+
+const rawBase = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = rawBase ? rawBase.replace(/\/+$/, "") : "";
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -10,9 +13,11 @@ async function request(path, options = {}) {
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const error = new Error(payload?.detail?.message || payload?.detail || "请求失败");
+    const normalized = normalizeApiError(payload, "请求失败");
+    const error = new Error(normalized.message);
     error.status = response.status;
     error.payload = payload;
+    error.details = normalized.details;
     throw error;
   }
   return payload;
@@ -24,6 +29,7 @@ export const api = {
   updateSettings: (payload) => request("/api/settings", { method: "PUT", body: JSON.stringify(payload) }),
   generateTimetable: (payload) => request("/api/timetables/generate", { method: "POST", body: JSON.stringify(payload) }),
   saveTimetable: (payload) => request("/api/timetables", { method: "POST", body: JSON.stringify(payload) }),
+  createChildVersion: (id, payload) => request(`/api/timetables/${encodeURIComponent(id)}/versions`, { method: "POST", body: JSON.stringify(payload) }),
   listTimetables: () => request("/api/timetables"),
   getTimetable: (id) => request(`/api/timetables/${id}`),
   listBackups: () => request("/api/backups"),

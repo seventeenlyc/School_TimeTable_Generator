@@ -15,7 +15,13 @@ from domain import (
     Teacher,
     TimetableVersion,
 )
-from local_optimizer import generate_proposals, score_proposal, solve_local_reschedule
+from local_optimizer import (
+    _Action,
+    _actions_conflict,
+    generate_proposals,
+    score_proposal,
+    solve_local_reschedule,
+)
 
 
 TUESDAY = date(2026, 9, 8)
@@ -199,3 +205,82 @@ def test_generate_proposals_sorts_candidates_by_total_score():
     assert [item.score.total_score for item in proposals] == sorted(
         (item.score.total_score for item in proposals), reverse=True
     )
+
+
+def test_actions_conflict_when_room_slot_overlaps():
+    slot_date = date(2026, 9, 8)
+    room_slot = ("room-301", slot_date, 2)
+
+    occ1 = AffectedOccurrence(
+        date=slot_date,
+        weekday=1,
+        period=1,
+        class_id="class-1",
+        is_split=False,
+        split_block_id=None,
+        group_index=None,
+        subject_id="subject-math",
+        teacher_id="teacher-1",
+        room_id="room-301",
+        base_version_id="version-base",
+    )
+    occ2 = AffectedOccurrence(
+        date=slot_date,
+        weekday=1,
+        period=3,
+        class_id="class-2",
+        is_split=False,
+        split_block_id=None,
+        group_index=None,
+        subject_id="subject-science",
+        teacher_id="teacher-2",
+        room_id="room-301",
+        base_version_id="version-base",
+    )
+    op1 = ChangeOperation(
+        date=slot_date,
+        period=1,
+        class_ids=["class-1"],
+        kind="swap",
+        before_label="before1",
+        after_label="after1",
+    )
+    op2 = ChangeOperation(
+        date=slot_date,
+        period=3,
+        class_ids=["class-2"],
+        kind="swap",
+        before_label="before2",
+        after_label="after2",
+    )
+
+    action_left = _Action(
+        occurrence=occ1,
+        strategy_cost=10,
+        operation=op1,
+        overrides=(),
+        substitution=None,
+        touched_slots=frozenset({("class-1", slot_date, 1)}),
+        teacher_slots=frozenset({("teacher-1", slot_date, 1)}),
+        room_slots=frozenset({room_slot}),
+        changed_cells=1,
+        moved_changes=1,
+        moved_split_blocks=0,
+        slot_distance=1,
+    )
+    action_right = _Action(
+        occurrence=occ2,
+        strategy_cost=10,
+        operation=op2,
+        overrides=(),
+        substitution=None,
+        touched_slots=frozenset({("class-2", slot_date, 3)}),
+        teacher_slots=frozenset({("teacher-2", slot_date, 3)}),
+        room_slots=frozenset({room_slot}),
+        changed_cells=1,
+        moved_changes=1,
+        moved_split_blocks=0,
+        slot_distance=1,
+    )
+
+    assert _actions_conflict(action_left, action_right) is True

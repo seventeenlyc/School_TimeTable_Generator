@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { api } from "../../api/client";
 import { buildEvent } from "./changeForm";
 import ProposalCard from "./ProposalCard";
+import AsyncButton from "../../components/AsyncButton";
 import { Bot, Sparkles, User, Calendar, Plus, Trash2, ShieldAlert, CheckCircle2, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -22,7 +23,6 @@ export default function ChangeAgentPage() {
   // Proposal State
   const [proposing, setProposing] = useState(false);
   const [proposals, setProposals] = useState(null);
-  const [diagnostics, setDiagnostics] = useState([]);
   const [selectedProposal, setSelectedProposal] = useState(null);
   const [applying, setApplying] = useState(false);
 
@@ -48,7 +48,6 @@ export default function ChangeAgentPage() {
   const handlePropose = async () => {
     try {
       setProposing(true);
-      setDiagnostics([]);
       setProposals(null);
 
       const eventPayload = buildEvent({
@@ -68,9 +67,6 @@ export default function ChangeAgentPage() {
         toast.error("未找到完全可行的调课方案");
       }
     } catch (err) {
-      if (err.data?.diagnostics) {
-        setDiagnostics(err.data.diagnostics);
-      }
       toast.error(err.message || "生成方案失败");
     } finally {
       setProposing(false);
@@ -260,15 +256,16 @@ export default function ChangeAgentPage() {
             </div>
 
             {/* Submit Button */}
-            <button
+            <AsyncButton
               type="button"
               onClick={handlePropose}
               disabled={proposing}
+              loading={proposing}
+              loadingLabel="计算方案中…"
               className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-950/50 transition-all disabled:opacity-50"
             >
-              <Sparkles size={16} />
-              {proposing ? "正在规划调课方案..." : "智能生成调课方案"}
-            </button>
+              <Sparkles size={16} /> 智能生成调课方案
+            </AsyncButton>
           </div>
         </div>
 
@@ -331,14 +328,16 @@ export default function ChangeAgentPage() {
               >
                 取消
               </button>
-              <button
+              <AsyncButton
                 type="button"
                 onClick={handleApply}
                 disabled={applying}
+                loading={applying}
+                loadingLabel="应用中…"
                 className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-950/40 disabled:opacity-50"
               >
-                {applying ? "正在应用..." : "确认应用并更新课表"}
-              </button>
+                确认应用并更新课表
+              </AsyncButton>
             </div>
           </div>
         </div>

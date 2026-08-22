@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import copy
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from api_models import (
     ApplyChangeRequest,
@@ -30,7 +32,12 @@ from domain import (
     TimetableVersion,
 )
 from repository import DataFileError, JsonRepository, RevisionConflict
-from schedule_service import NoActiveTimetable, create_child_version, resolve_day
+from schedule_service import (
+    NoActiveTimetable,
+    create_child_version,
+    resolve_day,
+    validate_resolved_day,
+)
 from validation import (
     ScheduleValidationError,
     ValidationIssue,
@@ -38,10 +45,12 @@ from validation import (
     assert_valid_version,
     rebuild_resource_indexes,
     validate_catalog,
+    validate_timetable_version,
 )
 
 
 DEFAULT_DATA_PATH = Path(__file__).resolve().parent / "data" / "timetable-data.json"
+DEFAULT_FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 CATALOG_FIELDS = (
     "teachers",
     "classes",
@@ -50,6 +59,17 @@ CATALOG_FIELDS = (
     "course_requirements",
     "split_course_blocks",
 )
+
+
+def _normalize_proposal_dict(proposal_data: Dict[str, Any]) -> Dict[str, Any]:
+    norm = copy.deepcopy(proposal_data)
+    norm.pop("id", None)
+    if isinstance(norm.get("score"), dict):
+        norm["score"].pop("total_score", None)
+    if isinstance(norm.get("version_candidate"), dict):
+        norm["version_candidate"].pop("id", None)
+        norm["version_candidate"].pop("created_at", None)
+    return norm
 
 
 def _encode(value: Any) -> Any:
@@ -83,6 +103,25 @@ def _raise_if_invalid_catalog(state: AppState) -> None:
     report = validate_catalog(state)
     if not report.valid:
         raise ScheduleValidationError(report)
+
+
+def _rebuild_catalog_derivations(state: AppState) -> AppState:
+    requirement_ids_by_teacher: Dict[str, List[str]] = {
+        teacher.id: [] for teacher in state.teachers
+    }
+    for requirement in state.course_requirements:
+        requirement_ids_by_teacher.setdefault(requirement.teacher_id, []).append(
+            requirement.id
+        )
+    for teacher in state.teachers:
+        teacher.teaching_assignment_ids = requirement_ids_by_teacher.get(
+            teacher.id, []
+        )
+    state.timetable_versions = [
+        rebuild_resource_indexes(state, version)
+        for version in state.timetable_versions
+    ]
+    return state
 
 
 def _cell_reference_ids(
@@ -202,7 +241,12 @@ def _history_reference_report(state: AppState) -> ValidationReport:
 def _assert_valid_persisted_state(state: AppState) -> None:
     _raise_if_invalid_catalog(state)
     for version in state.timetable_versions:
-        assert_valid_version(state, version)
+        report = validate_timetable_version(state, version)
+        if not report.valid:
+            for issue in report.errors:
+                if version.id not in issue.entity_ids:
+                    issue.entity_ids.insert(0, version.id)
+            raise ScheduleValidationError(report)
     history_report = _history_reference_report(state)
     if not history_report.valid:
         raise ScheduleValidationError(history_report)
@@ -238,6 +282,7 @@ def register_routes(app: FastAPI) -> None:
         def mutation(state: AppState) -> AppState:
             for field in CATALOG_FIELDS:
                 setattr(state, field, getattr(payload, field))
+            _rebuild_catalog_derivations(state)
             _assert_valid_persisted_state(state)
             return state
 
@@ -418,9 +463,11 @@ def register_routes(app: FastAPI) -> None:
                         "message": "the proposed change is no longer valid against current state",
                     },
                 )
-            matching = [p for p in live_proposals if p.id == proposal.id or (p.strategy == proposal.strategy and p.explanation == proposal.explanation)]
-            if not matching:
-                matching = [p for p in live_proposals if len(p.operations) == len(proposal.operations) and len(p.date_exceptions) == len(proposal.date_exceptions)]
+            target_norm = _normalize_proposal_dict(proposal.dict())
+            matching = [
+                p for p in live_proposals
+                if _normalize_proposal_dict(p.dict()) == target_norm
+            ]
             if not matching:
                 raise HTTPException(
                     status_code=422,
@@ -436,12 +483,12 @@ def register_routes(app: FastAPI) -> None:
                 assert_valid_version(state, v)
                 state.timetable_versions.append(v)
                 new_version_id = v.id
-            event = proposal.event.copy(update={"status": ChangeEventStatus.APPLIED})
+            event = valid_proposal.event.copy(update={"status": ChangeEventStatus.APPLIED})
             state.change_events.append(event)
             applied = AppliedChange(
                 event=event,
                 proposal_id=valid_proposal.id,
-                base_version_id=proposal.base_version_id,
+                base_version_id=valid_proposal.base_version_id,
                 strategy=valid_proposal.strategy,
                 score=valid_proposal.score,
                 new_version_id=new_version_id,
@@ -449,6 +496,21 @@ def register_routes(app: FastAPI) -> None:
                 date_exceptions=valid_proposal.date_exceptions,
             )
             state.applied_changes.append(applied)
+
+            unique_dates = {exc.date for exc in valid_proposal.date_exceptions}
+            for d in sorted(unique_dates):
+                resolved = resolve_day(state, d)
+                issues = validate_resolved_day(state, resolved)
+                if issues:
+                    raise HTTPException(
+                        status_code=422,
+                        detail={
+                            "code": "resolved_schedule_conflict",
+                            "message": "the proposal creates conflicts in the resolved calendar",
+                            "issues": issues,
+                        },
+                    )
+
             _assert_valid_persisted_state(state)
             return state
 
@@ -559,11 +621,47 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
 
-def create_app(data_path: Optional[Path] = None) -> FastAPI:
+def register_static_routes(app: FastAPI, frontend_dist: Path) -> None:
+    index_file = frontend_dist / "index.html"
+    if not (frontend_dist.exists() and frontend_dist.is_dir() and index_file.is_file()):
+        return
+
+    assets_dir = frontend_dist / "assets"
+    if assets_dir.exists() and assets_dir.is_dir():
+        app.mount(
+            "/assets",
+            StaticFiles(directory=str(assets_dir), check_dir=False),
+            name="assets",
+        )
+
+    @app.get("/{full_path:path}")
+    def serve_spa(full_path: str):
+        if full_path == "api" or full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        if full_path:
+            candidate = frontend_dist / full_path
+            # Check for existing static file
+            if "." in Path(full_path).name:
+                try:
+                    resolved_candidate = candidate.resolve()
+                    resolved_dist = frontend_dist.resolve()
+                    if resolved_candidate.is_relative_to(resolved_dist) and resolved_candidate.is_file():
+                        return FileResponse(resolved_candidate)
+                except (ValueError, RuntimeError):
+                    pass
+                raise HTTPException(status_code=404, detail="Not Found")
+        return FileResponse(index_file)
+
+
+def create_app(
+    data_path: Optional[Path] = None,
+    frontend_dist: Optional[Path] = None,
+) -> FastAPI:
     app = FastAPI(title="Local Timetable API")
     app.state.repository = JsonRepository(data_path or DEFAULT_DATA_PATH)
     configure_cors(app)
     register_routes(app)
+    register_static_routes(app, frontend_dist or DEFAULT_FRONTEND_DIST)
     register_error_handlers(app)
     return app
 

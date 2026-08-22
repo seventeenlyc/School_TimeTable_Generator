@@ -127,7 +127,7 @@ export function applyCellMove(classSchedules, classId, source, target, indexes) 
     for (const cId of sourceClasses) {
       if (newSchedules[cId]) {
         const currentSrc = newSchedules[cId][source.day]?.[source.period];
-        const currentTgt = newSchedules[cId][target.day]?.[target.period] || { kind: "empty" };
+        const currentTgt = newSchedules[cId][target.day]?.[target.period] ?? null;
 
         newSchedules[cId][target.day][target.period] = currentSrc;
         newSchedules[cId][source.day][source.period] = currentTgt;
@@ -138,7 +138,7 @@ export function applyCellMove(classSchedules, classId, source, target, indexes) 
 
   // Normal cell move / swap
   classGrid[target.day][target.period] = srcCell;
-  classGrid[source.day][source.period] = tgtCell || { kind: "empty" };
+  classGrid[source.day][source.period] = tgtCell ?? null;
 
   return newSchedules;
 }

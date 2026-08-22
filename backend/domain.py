@@ -78,6 +78,7 @@ class CourseRequirement(DomainModel):
     periods_per_week: int = Field(ge=1)
     room_id: Optional[str] = None
     consecutive_periods: int = Field(default=1, ge=1)
+    fixed_slots: List[Slot] = Field(default_factory=list)
 
 
 class SplitCourseGroup(DomainModel):

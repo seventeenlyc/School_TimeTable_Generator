@@ -216,3 +216,225 @@ def _apply_substitution(
         index = lesson.target_ids.index(substitution.target_id)
         if lesson.teacher_ids[index] == substitution.original_teacher_id:
             lesson.teacher_ids[index] = substitution.substitute_teacher_id
+
+
+def validate_resolved_day(state: AppState, resolved: ResolvedDay) -> List[dict]:
+    issues: List[dict] = []
+
+    def add_issue(code: str, message: str, period: Optional[int], entity_ids: List[str]) -> None:
+        issues.append({
+            "code": code,
+            "message": message,
+            "period": period,
+            "entity_ids": entity_ids,
+        })
+
+    requirements_map = {req.id: req for req in (state.course_requirements or []) if req and req.id}
+    blocks_map = {b.id: b for b in (state.split_course_blocks or []) if b and b.id}
+    teachers_map = {t.id: t for t in (state.teachers or []) if t and t.id}
+
+    # Find max period across all classes safely
+    all_periods = set()
+    for row in resolved.class_schedules.values():
+        if row:
+            for p in range(len(row)):
+                all_periods.add(p)
+
+    sorted_periods = sorted(all_periods)
+
+    for period in sorted_periods:
+        # Collect split blocks appearing in this period and which classes have them
+        split_classes_by_block: Dict[str, List[str]] = {}
+        # Track seen (period, target_id) to avoid duplicates from split lessons across source classes
+        seen_targets_in_period = set()
+        # Occupancy tracking: resource_id -> list of target_ids
+        teacher_targets: Dict[str, List[str]] = {}
+        room_targets: Dict[str, List[str]] = {}
+
+        for class_id, row in resolved.class_schedules.items():
+            if period >= len(row):
+                continue
+            lesson = row[period]
+            if lesson is None:
+                continue
+
+            cell = getattr(lesson, "cell", None)
+            kind = getattr(cell, "kind", None) if cell else None
+            req_id = getattr(cell, "requirement_id", None) if cell else None
+            block_id = getattr(cell, "split_block_id", None) if cell else None
+
+            teacher_ids = getattr(lesson, "teacher_ids", []) or []
+            subject_ids = getattr(lesson, "subject_ids", []) or []
+            room_ids = getattr(lesson, "room_ids", []) or []
+            target_ids = getattr(lesson, "target_ids", []) or []
+
+            # 1. Structure lengths validation
+            # teacher_ids/subject_ids/target_ids 长度一致；room_ids 可为0（普通课无教室）或与 target_ids 同长，否则 issue
+            len_target = len(target_ids)
+            len_teacher = len(teacher_ids)
+            len_subject = len(subject_ids)
+            len_room = len(room_ids)
+
+            if len_teacher != len_target or len_subject != len_target:
+                add_issue(
+                    code="lesson_structure_mismatch",
+                    message="teacher_ids, subject_ids, and target_ids lengths must match",
+                    period=period,
+                    entity_ids=[class_id],
+                )
+
+            if len_room != 0 and len_room != len_target:
+                add_issue(
+                    code="lesson_room_structure_mismatch",
+                    message="room_ids length must be 0 or match target_ids length",
+                    period=period,
+                    entity_ids=[class_id],
+                )
+
+            # 2. Kind specific validation
+            if kind == "lesson":
+                if not req_id or req_id not in requirements_map:
+                    add_issue(
+                        code="unknown_requirement",
+                        message=f"Requirement {req_id} does not exist in course_requirements",
+                        period=period,
+                        entity_ids=[class_id, req_id] if req_id else [class_id],
+                    )
+                else:
+                    req = requirements_map[req_id]
+                    if req.class_id != class_id:
+                        add_issue(
+                            code="requirement_class_mismatch",
+                            message=f"Requirement {req_id} class {req.class_id} does not match current class {class_id}",
+                            period=period,
+                            entity_ids=[class_id, req_id, req.class_id],
+                        )
+                # Also check target_ids contains requirement_id or targets belong to requirements
+                for tid in target_ids:
+                    if not tid or tid not in requirements_map:
+                        add_issue(
+                            code="unknown_target_requirement",
+                            message=f"Target {tid} does not exist in course_requirements",
+                            period=period,
+                            entity_ids=[class_id, tid] if tid else [class_id],
+                        )
+                    else:
+                        req = requirements_map[tid]
+                        if req.class_id != class_id:
+                            add_issue(
+                                code="target_requirement_class_mismatch",
+                                message=f"Target requirement {tid} class {req.class_id} does not match current class {class_id}",
+                                period=period,
+                                entity_ids=[class_id, tid, req.class_id],
+                            )
+
+            elif kind == "split":
+                if not block_id or block_id not in blocks_map:
+                    add_issue(
+                        code="unknown_split_block",
+                        message=f"Split block {block_id} does not exist",
+                        period=period,
+                        entity_ids=[class_id, block_id] if block_id else [class_id],
+                    )
+                else:
+                    block = blocks_map[block_id]
+                    if block_id not in split_classes_by_block:
+                        split_classes_by_block[block_id] = []
+                    split_classes_by_block[block_id].append(class_id)
+
+                    block_group_ids = {g.id for g in (block.groups or []) if g and g.id}
+                    for tid in target_ids:
+                        if tid not in block_group_ids:
+                            add_issue(
+                                code="split_target_not_in_block",
+                                message=f"Split target {tid} does not belong to split block {block_id}",
+                                period=period,
+                                entity_ids=[class_id, block_id, tid] if tid else [class_id, block_id],
+                            )
+            else:
+                add_issue(
+                    code="unknown_lesson_kind",
+                    message=f"Unknown lesson kind: {kind}",
+                    period=period,
+                    entity_ids=[class_id],
+                )
+
+            # 3. Teacher qualification & Resource occupancy collection
+            min_len = min(len_teacher, len_subject, len_target)
+            for idx in range(min_len):
+                t_id = teacher_ids[idx]
+                s_id = subject_ids[idx]
+                tgt_id = target_ids[idx]
+                r_id = room_ids[idx] if idx < len_room else None
+
+                # Teacher qualification
+                if not t_id or t_id not in teachers_map:
+                    add_issue(
+                        code="unknown_teacher",
+                        message=f"Teacher {t_id} does not exist",
+                        period=period,
+                        entity_ids=[class_id, t_id] if t_id else [class_id],
+                    )
+                else:
+                    teacher_obj = teachers_map[t_id]
+                    if s_id not in (teacher_obj.qualified_subject_ids or []):
+                        add_issue(
+                            code="teacher_unqualified",
+                            message=f"Teacher {t_id} is not qualified for subject {s_id}",
+                            period=period,
+                            entity_ids=[class_id, t_id, s_id],
+                        )
+
+                # Deduplicate occupancy per (period, target_id)
+                if tgt_id not in seen_targets_in_period:
+                    seen_targets_in_period.add(tgt_id)
+                    if t_id:
+                        if t_id not in teacher_targets:
+                            teacher_targets[t_id] = []
+                        teacher_targets[t_id].append(tgt_id)
+                    if r_id:
+                        if r_id not in room_targets:
+                            room_targets[r_id] = []
+                        room_targets[r_id].append(tgt_id)
+
+        # 4. Check split block synchronization in this period
+        # split lesson 的 target 必须属于其 block，且同一 split_block 在 block.source_class_ids 所有且仅这些班同 period 同步出现；
+        for block_id, classes_with_block in split_classes_by_block.items():
+            block = blocks_map[block_id]
+            expected_classes = set(block.source_class_ids or [])
+            actual_classes = set(classes_with_block)
+
+            missing_classes = expected_classes - actual_classes
+            extra_classes = actual_classes - expected_classes
+
+            if missing_classes or extra_classes:
+                add_issue(
+                    code="split_block_not_synchronized",
+                    message=f"Split block {block_id} is not synchronized across source classes",
+                    period=period,
+                    entity_ids=[block_id, *sorted(missing_classes | extra_classes)],
+                )
+
+        # 5. Teacher / Room conflicts
+        # 同一教师或同一非空教室同 period 不得用于两个不同 target
+        for t_id, t_targets in teacher_targets.items():
+            unique_targets = list(dict.fromkeys(t_targets))
+            if len(unique_targets) > 1:
+                add_issue(
+                    code="teacher_double_booked",
+                    message=f"Teacher {t_id} is assigned to multiple targets in period {period}",
+                    period=period,
+                    entity_ids=[t_id, *unique_targets],
+                )
+
+        for r_id, r_targets in room_targets.items():
+            unique_targets = list(dict.fromkeys(r_targets))
+            if len(unique_targets) > 1:
+                add_issue(
+                    code="room_double_booked",
+                    message=f"Room {r_id} is assigned to multiple targets in period {period}",
+                    period=period,
+                    entity_ids=[r_id, *unique_targets],
+                )
+
+    return issues

@@ -10,7 +10,6 @@ import TimetablePage from "./pages/timetable/TimetablePage";
 import EditTimetablePage from "./pages/timetable/EditTimetablePage";
 import GeneratePage from "./pages/generate/GeneratePage";
 import GuidePage from "./pages/home/GuidePage";
-import TimetableDisplay from "./pages/generate/TimetableDisplay";
 
 export default function App() {
   return (
@@ -35,7 +34,6 @@ export default function App() {
           <Route path="/timetables/:id" element={<TimetablePage />} />
           <Route path="/timetables/:id/edit" element={<EditTimetablePage />} />
           <Route path="/generate" element={<GeneratePage />} />
-          <Route path="/display/:id" element={<TimetableDisplay />} />
           <Route path="/guide" element={<GuidePage />} />
 
           {/* Legacy & Redirects */}

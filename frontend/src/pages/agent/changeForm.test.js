@@ -25,8 +25,6 @@ describe("changeForm event serialization", () => {
     const event = buildEvent({
       kind: "busy",
       teacherId: "teacher-1",
-      startDate: "2026-09-08",
-      endDate: "2026-09-08",
       reason: "参加教研",
       busySlots: [{ date: "2026-09-08", period: 2 }],
     });
@@ -34,8 +32,8 @@ describe("changeForm event serialization", () => {
     expect(event).toEqual({
       kind: "busy",
       teacher_id: "teacher-1",
-      start_date: "2026-09-08",
-      end_date: "2026-09-08",
+      start_date: null,
+      end_date: null,
       reason: "参加教研",
       busy_slots: [{ date: "2026-09-08", period: 2 }],
     });

@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
-from domain import AppState, ChangeEvent, ChangeEventKind, ChangeEventStatus, DateSlot, LessonCell, Settings
+from domain import AppState, ChangeEvent, ChangeEventKind, ChangeEventStatus, CourseRequirement, DateSlot, LessonCell, Settings, Slot
 
 
 def test_absence_requires_an_ordered_date_range():
@@ -98,3 +98,20 @@ def test_appstate_round_trip():
     parsed = AppState.parse_raw(json_str)
     assert parsed.schema_version == state.schema_version == 1
     assert parsed.revision == state.revision == 5
+
+
+def test_course_requirement_fixed_slots_default_and_round_trip():
+    requirement = CourseRequirement(
+        id="req-meeting",
+        class_id="class-1",
+        subject_id="subject-meeting",
+        teacher_id="teacher-1",
+        periods_per_week=1,
+    )
+    assert requirement.fixed_slots == []
+
+    restored = CourseRequirement.parse_raw(
+        requirement.copy(update={"fixed_slots": [Slot(weekday=0, period=7)]})
+        .json(by_alias=True)
+    )
+    assert restored.fixed_slots == [Slot(weekday=0, period=7)]

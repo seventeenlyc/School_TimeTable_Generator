@@ -1,6 +1,6 @@
 import pytest
 
-from domain import LessonCell, Slot
+from domain import CourseRequirement, LessonCell, SchoolClass, Slot, Teacher
 from factories import make_two_class_state, place_lesson, place_split
 from validation import (
     ScheduleValidationError,
@@ -204,3 +204,232 @@ def test_catalog_accepts_the_factory_state():
     report = validate_catalog(state)
 
     assert report.valid
+
+
+def test_catalog_allows_one_teacher_to_serve_more_than_two_classes():
+    state, _ = make_two_class_state()
+    state.classes.append(SchoolClass(id="class-3", name="Class 3"))
+    teacher = next(t for t in state.teachers if t.id == "teacher-li")
+    requirement = CourseRequirement(
+        id="req-class3-math",
+        class_id="class-3",
+        subject_id="subject-math",
+        teacher_id=teacher.id,
+        periods_per_week=2,
+    )
+    state.course_requirements.append(requirement)
+    teacher.teaching_assignment_ids.append(requirement.id)
+
+    assert validate_catalog(state).valid
+
+
+def test_catalog_rejects_duplicate_class_subject_with_same_teacher():
+    state, _ = make_two_class_state()
+    duplicate = state.course_requirements[0].copy(
+        update={"id": "req-class1-math-copy"}
+    )
+    state.course_requirements.append(duplicate)
+    next(t for t in state.teachers if t.id == duplicate.teacher_id).teaching_assignment_ids.append(duplicate.id)
+
+    issue = next(
+        e for e in validate_catalog(state).errors
+        if e.code == "duplicate_course_requirement"
+    )
+    assert {"class-1", "subject-math", "req-class1-math", duplicate.id} <= set(issue.entity_ids)
+
+
+def test_catalog_rejects_duplicate_class_subject_with_different_teachers():
+    state, _ = make_two_class_state()
+    other = next(t for t in state.teachers if t.id == "teacher-chen")
+    other.qualified_subject_ids.append("subject-math")
+    duplicate = state.course_requirements[0].copy(
+        update={"id": "req-class1-math-other", "teacher_id": other.id}
+    )
+    state.course_requirements.append(duplicate)
+    other.teaching_assignment_ids.append(duplicate.id)
+
+    issue = next(
+        e for e in validate_catalog(state).errors
+        if e.code == "duplicate_course_requirement_teachers"
+    )
+    assert {"teacher-li", "teacher-chen", duplicate.id} <= set(issue.entity_ids)
+
+
+def test_catalog_rejects_duplicate_fixed_slots():
+    state, _ = make_two_class_state()
+    state.course_requirements.append(
+        CourseRequirement(
+            id="req-meeting",
+            class_id="class-1",
+            subject_id="subject-chinese",
+            teacher_id="teacher-li",
+            periods_per_week=2,
+            fixed_slots=[Slot(weekday=0, period=0), Slot(weekday=0, period=0)],
+        )
+    )
+
+    report = validate_catalog(state)
+
+    codes = error_codes(report)
+    assert "duplicate_fixed_slot" in codes
+    assert "fixed_slot_conflict" not in codes
+
+
+def test_catalog_rejects_fixed_slots_exceeding_period_count():
+    state, _ = make_two_class_state()
+    state.course_requirements.append(
+        CourseRequirement(
+            id="req-meeting",
+            class_id="class-1",
+            subject_id="subject-chinese",
+            teacher_id="teacher-li",
+            periods_per_week=1,
+            fixed_slots=[Slot(weekday=0, period=0), Slot(weekday=1, period=0)],
+        )
+    )
+
+    report = validate_catalog(state)
+
+    assert "fixed_slot_count" in error_codes(report)
+
+
+def test_catalog_rejects_fixed_slots_incompatible_with_consecutive_rule():
+    state, _ = make_two_class_state()
+    state.course_requirements.append(
+        CourseRequirement(
+            id="req-meeting",
+            class_id="class-1",
+            subject_id="subject-chinese",
+            teacher_id="teacher-li",
+            periods_per_week=2,
+            consecutive_periods=2,
+            fixed_slots=[Slot(weekday=0, period=0), Slot(weekday=1, period=0)],
+        )
+    )
+
+    report = validate_catalog(state)
+
+    assert "fixed_slot_consecutive" in error_codes(report)
+
+
+def test_catalog_rejects_fixed_slots_outside_configured_periods():
+    state, _ = make_two_class_state()
+    state.course_requirements.append(
+        CourseRequirement(
+            id="req-meeting",
+            class_id="class-1",
+            subject_id="subject-chinese",
+            teacher_id="teacher-li",
+            periods_per_week=1,
+            fixed_slots=[Slot(weekday=0, period=5)],
+        )
+    )
+
+    report = validate_catalog(state)
+
+    assert "slot_out_of_range" in error_codes(report)
+
+
+def test_catalog_rejects_fixed_slot_when_teacher_is_unavailable():
+    state, _ = make_two_class_state()
+    state.teachers[0].weekly_unavailable_slots = [Slot(weekday=0, period=0)]
+    state.course_requirements.append(
+        CourseRequirement(
+            id="req-meeting",
+            class_id="class-1",
+            subject_id="subject-chinese",
+            teacher_id=state.teachers[0].id,
+            periods_per_week=1,
+            fixed_slots=[Slot(weekday=0, period=0)],
+        )
+    )
+
+    report = validate_catalog(state)
+
+    assert "fixed_slot_unavailable" in error_codes(report)
+
+
+def test_catalog_rejects_fixed_slot_collisions_across_classes_teachers_and_rooms():
+    state, _ = make_two_class_state()
+    state.course_requirements.extend(
+        [
+            CourseRequirement(
+                id="req-class-collision-1",
+                class_id="class-1",
+                subject_id="subject-chinese",
+                teacher_id="teacher-li",
+                periods_per_week=1,
+                fixed_slots=[Slot(weekday=0, period=0)],
+            ),
+            CourseRequirement(
+                id="req-class-collision-2",
+                class_id="class-1",
+                subject_id="subject-math",
+                teacher_id="teacher-wang",
+                periods_per_week=1,
+                fixed_slots=[Slot(weekday=0, period=0)],
+            ),
+            CourseRequirement(
+                id="req-teacher-collision-1",
+                class_id="class-1",
+                subject_id="subject-chinese",
+                teacher_id="teacher-li",
+                periods_per_week=1,
+                fixed_slots=[Slot(weekday=0, period=1)],
+            ),
+            CourseRequirement(
+                id="req-teacher-collision-2",
+                class_id="class-2",
+                subject_id="subject-math",
+                teacher_id="teacher-li",
+                periods_per_week=1,
+                fixed_slots=[Slot(weekday=0, period=1)],
+            ),
+            CourseRequirement(
+                id="req-room-collision-1",
+                class_id="class-1",
+                subject_id="subject-music",
+                teacher_id="teacher-wang",
+                room_id="room-302",
+                periods_per_week=1,
+                fixed_slots=[Slot(weekday=1, period=0)],
+            ),
+            CourseRequirement(
+                id="req-room-collision-2",
+                class_id="class-2",
+                subject_id="subject-music",
+                teacher_id="teacher-zhang",
+                room_id="room-302",
+                periods_per_week=1,
+                fixed_slots=[Slot(weekday=1, period=0)],
+            ),
+        ]
+    )
+
+    report = validate_catalog(state)
+    codes = error_codes(report)
+
+    assert "fixed_slot_conflict" in codes
+
+
+def test_missing_fixed_slot_is_reported():
+    state, version = make_two_class_state()
+    req = next(r for r in state.course_requirements if r.id == "req-class1-math")
+    req.fixed_slots = [Slot(weekday=0, period=0)]
+    place_lesson(version, "class-1", 0, 1, "req-class1-math")
+
+    report = validate_timetable_version(state, version)
+
+    assert "missing_fixed_slot" in error_codes(report)
+
+
+def test_split_daily_subject_limit_is_reported():
+    state, version = make_two_class_state()
+    state.settings.max_daily_subject_periods = 1
+    block = state.split_course_blocks[0]
+    place_split(version, block, 0, 0)
+    place_split(version, block, 0, 1)
+
+    report = validate_timetable_version(state, version)
+
+    assert "split_daily_subject_limit" in error_codes(report)

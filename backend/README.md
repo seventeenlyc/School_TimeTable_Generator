@@ -1,477 +1,127 @@
-# Backend — School Timetable Generator API
+# 后端服务文档 (Backend)
 
-A **FastAPI** backend that generates clash-free school timetables using **Google OR-Tools CP-SAT** constraint programming, validates manual edits against scheduling rules, and persists timetables to MongoDB with versioning support.
-
----
-
-## Table of Contents
-
-1. [Tech Stack](#tech-stack)
-2. [Project Structure](#project-structure)
-3. [Installation](#installation)
-4. [Configuration](#configuration)
-5. [Running the Server](#running-the-server)
-6. [API Reference](#api-reference)
-7. [Solver Architecture](#solver-architecture)
-8. [Constraint System](#constraint-system)
-9. [Infeasibility Diagnostics](#infeasibility-diagnostics)
-10. [Data Models](#data-models)
-11. [Testing](#testing)
-12. [Production Deployment](#production-deployment)
+基于 **FastAPI + Google OR-Tools + Pydantic + JsonRepository** 构建的单机本地排课与调代课后端。
 
 ---
 
-## Tech Stack
+## 核心架构与设计
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| Python | 3.11.9 | Runtime |
-| FastAPI | 0.111.0 | Web framework |
-| uvicorn | 0.30.1 | ASGI server |
-| ortools | 9.14.6206 | CP-SAT constraint solver |
-| pydantic | 1.10.19 | Request/response validation |
-| pymongo | 4.7.2 | MongoDB driver |
-| python-dotenv | 1.0.1 | Environment variable loading |
-| pytz | 2024.1 | Timezone handling (IST timestamps) |
-| python-multipart | 0.0.9 | Form data parsing |
+1. **统一数据模型（Schema Version 1）**：
+   - 数据格式使用 `schema_version = 1`，包含基础数据（教师、班级、科目、教室、排课需求、走班设置）、配置项、课表版本集合、调代课事件与应用记录。
+2. **乐观并发控制（Revision）**：
+   - 每次数据变更均基于 `base_revision` 进行版本比对。若前端提交的 revision 与本地当前 revision 不一致，返回 `409 Conflict`，避免并发写覆盖。
+3. **本地原子写入与自动备份**：
+   - 基于 `JsonRepository`，每次保存时先原子写入临时文件再重命名替换，并在修改前自动生成时间戳备份（位于 `backend/data/backups/`）。
+4. **单端口静态托管**：
+   - `server.py` 会自动探测 `frontend/dist` 目录。若存在，则直接托管前端静态单页应用（SPA）；若前端未构建或 `dist` 不存在，所有 `/api` 接口仍完全可用。
 
 ---
 
-## Project Structure
+## 核心模块职责
 
-```
-backend/
-├── server.py          # FastAPI app, all routes, Pydantic request/response schemas
-├── generator.py       # CP-SAT solver engine + relaxation diagnostic model (714 lines)
-├── models.py          # Core data models: InputTeacher, Teacher dataclass, Timetable dataclass
-├── test_validation.py # 6 unit tests for /validate-edit constraint checks
-├── test_solver.py     # 3 unit tests for solver constraints
-├── Procfile           # Render deployment command
-├── .python-version    # 3.11.9
-└── requirements.txt   # All Python dependencies with pinned versions
-```
+- **`domain.py`**：定义全部核心领域实体与 Pydantic 模型（如教师、班级、科目、教室、排课需求 `CourseRequirement`、走班块 `SplitCourseBlock`、课表版本 `TimetableVersion`、调代课事件 `ChangeEvent`、调代课方案 `ChangeProposal` 等）。
+- **`validation.py`**：负责基础数据完整性校验、课表结构合法性、教师/班级/场地冲突检测、教师可用时段验证、连堂课约束以及衍生资源索引重建（`rebuild_resource_indexes`）。
+- **`base_solver.py`**：基于 Google OR-Tools CP-SAT 求解器构建基础排课约束规划模型，处理全校课表自动生成、硬约束求解及可行性诊断分析。
+- **`change_agent.py`**：负责调代课变动事件影响范围分析（`AffectedOccurrence`）与基于规则的直接调代课候选方案生成。
+- **`local_optimizer.py`**：基于多目标评分与局部搜索的调代课优化求解器，支持最小改动步数、课时对调、代课安排及长期缺勤生成新版本。
+- **`schedule_service.py`**：提供特定真实日期的课表视图解析（`resolve_day`）、按周解析（`resolve_week`）、版本继承派生（`create_child_version`）及生效日期判定。
+- **`repository.py`**：负责本地文件持久化 `JsonRepository`，包含 JSON 读写、数据校验、版本乐观锁控制、备份轮转和灾难恢复。
 
 ---
 
-## Installation
+## 数据与备份路径
 
-```bash
-cd backend
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-
-# macOS / Linux
-source venv/bin/activate
-
-pip install -r requirements.txt
-```
-
-Python 3.11.9 is required. Using a different minor version may cause ortools compatibility issues.
+- **主数据文件**：`backend/data/timetable-data.json`
+- **备份归档目录**：`backend/data/backups/`
+- **样例数据集目录**：`backend/samples/` (包含 15 班级全功能演示样例 `15-class-demo.json`)
 
 ---
 
-## Configuration
+## 演示样例生成与安装
 
-Create `backend/.env` (this file is git-ignored):
+项目中提供了用于演示与测试的 15 班级规模完整样例数据生成脚本 `backend/sample_15_classes.py`。
 
-```env
-MONGO_URI=mongodb://localhost:27017/timetableDB
-FRONTEND_URL=http://localhost:5173
+### 1. 默认生成样例文件（输出到 `backend/samples/15-class-demo.json`）
+
+在代码仓根目录运行以下命令生成样例 JSON 文件（不会修改当前运行中的数据文件）：
+
+```powershell
+backend/venv/Scripts/python.exe backend/sample_15_classes.py
 ```
 
-**Production values:**
-- `MONGO_URI` → MongoDB Atlas connection string (include `?retryWrites=true&w=majority`)
-- `FRONTEND_URL` → Exact origin of your deployed frontend (no trailing slash)
+### 2. 直接安装样例数据至系统（写入 `backend/data/timetable-data.json`）
 
----
+若需要直接将样例数据载入系统作为当前主数据，可使用 `--install` 参数：
 
-## Running the Server
+> **重要提示**：运行带 `--install` 的命令前，**必须先停止本地服务**（避免服务运行中写入导致数据冲突或缓存不一致）。
 
-```bash
-# Development (auto-reload on file changes)
-uvicorn server:app --reload --port 8000
-
-# Production (see Production Deployment section)
-python -m uvicorn server:app --host 0.0.0.0 --port 8000
-```
-
-- **Swagger UI:** `http://localhost:8000/docs`
-- **ReDoc:** `http://localhost:8000/redoc`
-- **Health check:** `GET http://localhost:8000/` → `{"message": "Timetable Generator API"}`
-
----
-
-## API Reference
-
-### `GET /`
-
-Health check. Returns `{"message": "Timetable Generator API"}`. No auth required.
-
----
-
-### `POST /generate`
-
-Generates a clash-free timetable using the CP-SAT solver. Solver timeout is 60 seconds.
-
-**Request Body:**
-
-```json
-{
-  "workingDays": 5,
-  "periods": 8,
-  "classes": ["10A", "10B", "11A"],
-  "subjects": ["Mathematics", "Physics", "CS Lab"],
-  "userId": "user_clerk_id",
-  "title": "Spring 2026",
-  "versionName": "v1",
-  "parentGroupId": null,
-  "teachers": [
-    {
-      "name": "Mr. Green",
-      "subjects": ["Mathematics"],
-      "mainSubject": "Mathematics",
-      "labPeriod": null,
-      "assigned_class": "10A",
-      "unavailable_slots": [[0, 0], [0, 1]],
-      "periods": [
-        { "class_name": "10A", "subject": "Mathematics", "noOfPeriods": 5 },
-        { "class_name": "10B", "subject": "Mathematics", "noOfPeriods": 4 }
-      ]
-    }
-  ]
-}
-```
-
-`unavailable_slots` is a list of `[dayIndex, periodIndex]` pairs (both 0-indexed).
-
-**Success Response `200`:**
-
-```json
-{
-  "status": "OK",
-  "class_timetable": {
-    "10A": [
-      ["Mathematics (Mr. Green)", "Free", "Physics (Ms. Blue)", ...],
-      ...
-    ]
-  },
-  "teacher_timetable": {
-    "Mr. Green": [
-      ["10A", "Free", "10B", ...],
-      ...
-    ]
-  }
-}
-```
-
-Outer array = days, inner array = periods.
-
-**Infeasibility Response `200`:**
-
-```json
-{
-  "status": "INFEASIBLE",
-  "message": "[Error] No feasible timetable solution exists...",
-  "error_type": "INFEASIBLE_SOLUTION",
-  "error_details": {
-    "conflict_diagnostics": [
-      "Teacher 'Mr. Green' was scheduled on blocked slot Monday, Period 1 for Class 10A.",
-      "Specialized Lab Room for 'CS Lab' was double-booked on Monday, Period 1 by classes: 10A, 10B."
-    ]
-  }
-}
-```
-
-**Input Validation Error `200`** (caught before the solver runs):
-
-```json
-{
-  "status": "ERROR",
-  "error_type": "INPUT_VALIDATION_FAILED",
-  "message": "Total required periods (52) exceed available slots (40).",
-  "error_details": { "validation_type": "PERIODS_OVERFLOW" }
-}
+```powershell
+backend/venv/Scripts/python.exe backend/sample_15_classes.py --install
 ```
 
 ---
 
-### `POST /validate-edit`
+## 首次安装与运行
 
-Validates a manually edited timetable against all 7 constraint rules before saving.
+### 1. 环境准备与依赖安装
 
-**Request Body:**
-
-```json
-{
-  "class_timetable": { "10A": [["Mathematics (Mr. Green)", ...], ...] },
-  "teacher_timetable": { "Mr. Green": [["10A", ...], ...] },
-  "workingDays": 5,
-  "periods": 8,
-  "classes": ["10A", "10B"],
-  "subjects": ["Mathematics", "CS Lab"],
-  "teachers": [
-    { "name": "Mr. Green", "unavailable_slots": [[0, 0]], "periods": [...], ... }
-  ]
-}
+```powershell
+cd D:\School_TimeTable_Generator
+python -m venv backend\venv
+.\backend\venv\Scripts\python.exe -m pip install --upgrade pip
+.\backend\venv\Scripts\pip.exe install -r backend\requirements.txt
 ```
 
-**Validation rules applied (in order):**
+### 2. 启动服务
 
-1. Teacher unavailability — teacher not scheduled in their blocked slots
-2. Teacher double-booking — same teacher not in two classes at the same time
-3. Daily subject limit — max 2 periods of the same subject per class per day
-4. Lab consecutive blocks — lab subjects must be in adjacent pairs
-5. Lab room double-booking — max 1 class using the same lab subject per period
-6. Class teacher first period — class teacher's main subject in at least one first period (warning only)
-
-**Valid Response `200`:**
-
-```json
-{ "status": "valid", "errors": [], "warnings": [] }
+**开发模式（端口 8000）：**
+```powershell
+cd D:\School_TimeTable_Generator
+.\backend\venv\Scripts\python.exe -m uvicorn server:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
 ```
 
-**Error Response `200`:**
+### 3. 运行自动化测试
 
-```json
-{
-  "status": "error",
-  "errors": ["Teacher 'Mr. Green' is scheduled during unavailable slot: Monday, Period 1"],
-  "warnings": []
-}
+```powershell
+cd D:\School_TimeTable_Generator
+.\backend\venv\Scripts\python.exe -m pytest backend/tests -v
 ```
 
 ---
 
-### `POST /add`
+## 路由清单 (API Routes)
 
-Saves a generated timetable to MongoDB. Adds `createdAt` timestamp (IST). Returns the inserted document with its `_id`.
+`server.py` 中定义的全部 `/api` 接口如下：
 
----
-
-### `GET /get-timetables/{user_id}`
-
-Returns all timetables for a given user, sorted by `createdAt` descending. Used by the dashboard.
-
----
-
-### `GET /get-timetable/{timetable_id}`
-
-Returns a single timetable document by its MongoDB ObjectId.
-
----
-
-### `PUT /update-timetable/{timetable_id}`
-
-Updates an existing timetable document. Used for both overwrite and versioned saves from the edit modal.
-
----
-
-### `DELETE /delete-timetable/{timetable_id}`
-
-Deletes a timetable document. Returns `{"message": "Deleted"}` or `{"message": "Not Found"}`.
+| 方法 | 路径 | 用途说明 |
+| :--- | :--- | :--- |
+| `GET` | `/api/state` | 获取当前全量系统状态（包含 revision、基础数据、课表版本、调代课记录及配置） |
+| `PUT` | `/api/catalog` | 更新基础数据（教师、班级、科目、教室、排课需求、走班设置），要求携带 `base_revision` |
+| `PUT` | `/api/settings` | 更新排课全局配置（每天节次数、备份上限、权重系数等），要求携带 `base_revision` |
+| `POST` | `/api/timetables/generate` | 基于当前基础数据与配置，运行求解器生成课表草案（仅预览，不持久化保存） |
+| `POST` | `/api/timetables` | 保存生成的课表版本草案至持久化存储中，创建正式课表版本 |
+| `GET` | `/api/timetables` | 获取已保存的全部课表版本概要列表 |
+| `GET` | `/api/timetables/{version_id}` | 获取指定课表版本的完整结构与课表矩阵 |
+| `POST` | `/api/timetables/{version_id}/versions` | 基于现有版本创建派生子版本课表（支持指定新的 `effective_from` 日期） |
+| `DELETE` | `/api/timetables/{version_id}` | 删除未被引用的课表版本（已被派生继承或关联调代课记录的版本禁止删除） |
+| `GET` | `/api/backups` | 获取本地历史备份快照列表（文件名、大小、修改时间） |
+| `POST` | `/api/backups/{name}/restore` | 恢复指定的本地备份快照（请求体需显式携带 `{"confirmed": true}`） |
+| `POST` | `/api/change-proposals` | 提交教师繁忙/缺勤变动事件，计算并返回一组调代课候选优化方案（不修改状态） |
+| `POST` | `/api/changes/apply` | 提交选中的调代课方案，重新校验后正式持久化应用并更新日历状态 |
+| `GET` | `/api/changes` | 获取全校已应用的调代课历史记录列表（按应用时间倒序排列） |
+| `GET` | `/api/calendar/day` | 查询指定真实日期（参数 `date=YYYY-MM-DD`）的最终解析课表（合并版本与代课例外） |
 
 ---
 
-## Solver Architecture
+## 常见 HTTP 错误状态码说明
 
-### Primary Model — `generate_with_teacher_list()`
-
-The solver creates one integer decision variable per `(class, day, period)` slot. The variable's domain is the set of valid assignment IDs plus 0 (Free).
-
-```python
-# Conceptually:
-timetable[class][day][period] = assignment_id  # or 0 for Free
-```
-
-Each assignment ID maps to a unique `(teacher, subject, class)` triple. The solver then enforces hard constraints across these variables and calls `solver.Solve()` with a 60-second timeout.
-
-**Hard constraints:**
-
-| Constraint | Description |
-|-----------|-------------|
-| Teacher uniqueness | A teacher can appear in at most one class per time slot |
-| Period count | Each class-subject pair receives exactly its required number of periods |
-| Daily subject limit | No class has more than 2 periods of the same subject per day |
-| Lab consecutive | Lab subjects are always scheduled in adjacent period pairs |
-| Lab room occupancy | At most 1 class may use a given lab subject per time slot |
-| Teacher unavailability | Blocked slots are excluded from the solver's domain |
-| Valid assignments only | Only pre-approved teacher-subject-class combinations are considered |
-
-**Soft constraint (penalized):**
-
-- Class teacher main subject assigned to at least one first period of a day
-
-**Return values:**
-
-- `cp_model.OPTIMAL` or `cp_model.FEASIBLE` → timetable returned
-- `cp_model.INFEASIBLE` → `run_relaxation_diagnostics()` called → diagnostics returned
-
----
-
-### Input Validation — `validate_input_constraints()`
-
-Runs before the solver to catch obvious logical errors:
-
-| Error Type | Check |
-|-----------|-------|
-| `PERIODS_OVERFLOW` | Total required periods > available slots (days × periods) |
-| `DAILY_SUBJECT_LIMIT` | Any subject assigned more than 2 × working_days periods |
-| `TEACHER_OVERLOAD` | Teacher assigned more periods than available slots |
-| `LAB_PERIOD_ODD` | Lab subjects must have an even period count (consecutive pairs) |
-| `MAIN_SUBJECT_MISSING` | Class teacher has no workload entry for their main subject |
-| `DUPLICATE_SUBJECT` | Same subject assigned to multiple teachers for the same class |
-
----
-
-### Relaxation Diagnostic Model — `run_relaxation_diagnostics()`
-
-When the primary solver returns INFEASIBLE, this function builds a second CP-SAT model where every hard constraint is replaced by a penalized slack variable. Minimizing total penalty identifies which constraints are violated and by how much.
-
-**Penalty weights:**
-
-| Penalty Category | Weight |
-|-----------------|--------|
-| Subject period count shortage | 10,000 |
-| Teacher double-booking | 100 |
-| Teacher unavailability violation | 100 |
-| Lab room double-booking | 100 |
-| Lab non-consecutive scheduling | 100 |
-| Daily subject limit excess | 100 |
-| Class teacher first period missed | 100 |
-
-The function returns a list of human-readable diagnostic strings attached to the API response as `conflict_diagnostics`.
-
----
-
-## Infeasibility Diagnostics
-
-The frontend `DiagnosticsPanel` component in `AddTeacher.jsx` classifies diagnostic messages by pattern:
-
-| Pattern Match | Icon | Category |
-|--------------|------|---------|
-| `"is double-booked"` | 👥 | Teacher Double-Booking |
-| `"was scheduled on blocked slot"` | 🚫 | Unavailability Violation |
-| `"Lab Room.*double-booked"` | 🧪 | Lab Room Conflict |
-| `"not scheduled consecutively"` | 🔗 | Lab Block Violation |
-| `"has only \d+ periods.*requires"` | 📊 | Period Count Shortage |
-| `"exceeding the daily limit"` | ⚠️ | Daily Subject Limit |
-| `"Class Teacher.*not assigned the first period"` | 🎓 | Class Teacher Priority |
-
----
-
-## Data Models
-
-### `InputTeacher` (Pydantic — request)
-
-```python
-class InputTeacher(BaseModel):
-    name: str
-    subjects: List[str]
-    mainSubject: str
-    labPeriod: Optional[str] = None
-    assigned_class: Optional[str] = None
-    unavailable_slots: Optional[List[List[int]]] = []
-    periods: List[PeriodAssignment]
-
-class PeriodAssignment(BaseModel):
-    class_name: str
-    subject: str
-    noOfPeriods: int
-```
-
-### `Teacher` (dataclass — internal solver representation)
-
-```python
-@dataclass
-class Teacher:
-    name: str
-    subjects_by_class: Dict[str, Dict[str, int]]  # {class: {subject: periods}}
-    main_subject: str
-    assigned_class: Optional[str] = None
-    lab_subjects: set = field(default_factory=set)
-    unavailable_slots: List[List[int]] = field(default_factory=list)
-```
-
-### `EditValidationRequest` (Pydantic — validate-edit)
-
-```python
-class EditValidationRequest(BaseModel):
-    class_timetable: Dict[str, List[List[str]]]
-    teacher_timetable: Dict[str, List[List[str]]]
-    workingDays: int
-    periods: int
-    classes: List[str]
-    subjects: List[str]
-    teachers: List[TeacherInput]
-```
-
----
-
-## Testing
-
-```bash
-# Run all 9 tests with verbose output
-python -m unittest test_validation.py test_solver.py -v
-```
-
-### `test_validation.py` — 6 tests
-
-| Test | What it verifies |
-|------|----------------|
-| `test_validate_edit_valid` | A correctly formed timetable passes all 7 checks |
-| `test_validate_edit_double_booking` | Teacher in two classes at the same time is caught |
-| `test_validate_edit_daily_subject_cap` | More than 2 periods of a subject in one day is caught |
-| `test_validate_edit_isolated_lab_period` | A lone lab period not in a consecutive pair is caught |
-| `test_validate_edit_teacher_unavailability` | Teacher scheduled in a blocked slot is caught |
-| `test_validate_edit_lab_room_double_booking` | Two classes using the same lab simultaneously is caught |
-
-### `test_solver.py` — 3 tests
-
-| Test | What it verifies |
-|------|----------------|
-| `test_teacher_unavailability_respected` | Solver never places a teacher in a blocked slot |
-| `test_lab_room_double_booking_prevented` | Solver returns INFEASIBLE when lab room conflict is unavoidable |
-| `test_infeasibility_diagnostics_returned` | Diagnostic messages are returned when solver fails |
-
----
-
-## Production Deployment
-
-The backend is deployed on **Render** using the `Procfile`:
-
-```
-web: python -m uvicorn server:app --host 0.0.0.0 --port 8000
-```
-
-Render detects `Procfile` and `.python-version` automatically.
-
-**Environment variables to set in Render dashboard:**
-
-| Variable | Value |
-|----------|-------|
-| `MONGO_URI` | Atlas connection string (`mongodb+srv://...`) |
-| `FRONTEND_URL` | Production frontend URL (e.g. `https://timetable-generator-t4h3.onrender.com`) |
-
-**Production checklist:**
-
-- [ ] `MONGO_URI` uses Atlas (not local MongoDB) with auth credentials
-- [ ] `FRONTEND_URL` exactly matches the deployed frontend origin (no trailing slash)
-- [ ] `.env` file is not committed to the repository
-- [ ] Render web service is set to Python 3.11.9 (matches `.python-version`)
-- [ ] MongoDB Atlas IP allowlist includes Render's outbound IP ranges (or is set to `0.0.0.0/0`)
-- [ ] CORS: only `FRONTEND_URL` and `localhost` dev origins are allowed (not `*`)
-
-**Manual production run (non-Render):**
-
-```bash
-pip install gunicorn
-gunicorn server:app \
-  -w 4 \
-  -k uvicorn.workers.UvicornWorker \
-  --bind 0.0.0.0:8000 \
-  --timeout 120
-```
-
-Set `--workers` to `(2 × CPU cores) + 1`. The solver can run for up to 60 seconds, so `--timeout 120` provides a safe margin.
+- **`409 Conflict`**：
+  - `revision_conflict`：提交数据时的 `base_revision` 与当前服务端最新 revision 不一致，说明数据已被其他操作修改，需重新拉取最新状态后重试；
+  - 课表版本已被其他子版本继承或已被调代课事件引用时尝试删除，返回 409。
+- **`422 Unprocessable Entity`**：
+  - `schedule_validation_failed`：基础数据或课表结构不满足业务校验规则（如教师/场地重叠、连堂破损、超额排课等）；
+  - `generation_failed`：OR-Tools 求解器判定在当前约束条件下无可行解，返回结构化排课诊断信息；
+  - `no_complete_change_plan` / `proposal_tampered_or_invalid`：无法找到可行的调代课方案，或前端提交的应用方案与当前最新状态计算结果不匹配；
+  - `resolved_schedule_conflict`：调代课应用后在指定真实日期日历中产生了新的资源冲突。
+- **`503 Service Unavailable`**：
+  - `data_file_unavailable`：本地 `timetable-data.json` 数据文件损坏、无法解析或无法访问。

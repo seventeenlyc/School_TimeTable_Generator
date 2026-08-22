@@ -52,10 +52,19 @@ class _Action:
     substitution: Optional[TeacherSubstitution]
     touched_slots: frozenset[Tuple[str, date, int]]
     teacher_slots: frozenset[Tuple[str, date, int]]
+    room_slots: frozenset[Tuple[str, date, int]]
     changed_cells: int
     moved_changes: int
     moved_split_blocks: int
     slot_distance: int
+
+
+def _actions_conflict(left: _Action, right: _Action) -> bool:
+    return bool(
+        left.touched_slots.intersection(right.touched_slots)
+        or left.teacher_slots.intersection(right.teacher_slots)
+        or left.room_slots.intersection(right.room_slots)
+    )
 
 
 def score_proposal(
@@ -151,10 +160,7 @@ def solve_local_reschedule(
         for right_occurrence, right_action, right in flat[left_index + 1 :]:
             if left_occurrence == right_occurrence:
                 continue
-            if (
-                left.touched_slots.intersection(right.touched_slots)
-                or left.teacher_slots.intersection(right.teacher_slots)
-            ):
+            if _actions_conflict(left, right):
                 model.Add(
                     variables[(left_occurrence, left_action)]
                     + variables[(right_occurrence, right_action)]
@@ -294,6 +300,7 @@ def _direct_substitution_actions(
                 substitution=substitution,
                 touched_slots=frozenset(),
                 teacher_slots=frozenset({(teacher_id, occurrence.date, occurrence.period)}),
+                room_slots=frozenset(),
                 changed_cells=0,
                 moved_changes=0,
                 moved_split_blocks=0,
@@ -375,6 +382,9 @@ def _ordinary_move_actions(
                     continue
 
                 teacher_slots = {(replacement_id, destination_date, destination_period)}
+                room_slots: Set[Tuple[str, date, int]] = set()
+                if occurrence.room_id:
+                    room_slots.add((occurrence.room_id, destination_date, destination_period))
                 destination_cell = None
                 if destination_lesson is not None:
                     destination_cell = destination_lesson.cell.copy(deep=True)
@@ -398,6 +408,8 @@ def _ordinary_move_actions(
                     ):
                         continue
                     teacher_slots.add((other_teacher_id, occurrence.date, occurrence.period))
+                    if other_room_id:
+                        room_slots.add((other_room_id, occurrence.date, occurrence.period))
 
                 overrides = (
                     CellOverride(
@@ -447,6 +459,7 @@ def _ordinary_move_actions(
                             }
                         ),
                         teacher_slots=frozenset(teacher_slots),
+                        room_slots=frozenset(room_slots),
                         changed_cells=2,
                         moved_changes=1,
                         moved_split_blocks=0,
@@ -491,6 +504,7 @@ def _split_move_actions(
                 continue
             for replacement_id in _qualified_teacher_ids(state, occurrence):
                 teacher_slots: Set[Tuple[str, date, int]] = set()
+                room_slots: Set[Tuple[str, date, int]] = set()
                 feasible = True
                 for index, group in enumerate(block.groups):
                     teacher_id = replacement_id if index == occurrence.group_index else group.teacher_id
@@ -511,6 +525,8 @@ def _split_move_actions(
                         feasible = False
                         break
                     teacher_slots.add((teacher_id, destination_date, destination_period))
+                    if group.room_id:
+                        room_slots.add((group.room_id, destination_date, destination_period))
                 if not feasible:
                     continue
                 if long_term and not _teacher_available_after_recovery(
@@ -572,6 +588,7 @@ def _split_move_actions(
                         ),
                         touched_slots=frozenset(touched),
                         teacher_slots=frozenset(teacher_slots),
+                        room_slots=frozenset(room_slots),
                         changed_cells=len(overrides),
                         moved_changes=1,
                         moved_split_blocks=1,

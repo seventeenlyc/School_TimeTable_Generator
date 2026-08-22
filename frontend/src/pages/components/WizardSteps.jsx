@@ -1,8 +1,8 @@
 const STEPS = [
-  { num: 1, label: "Setup" },
-  { num: 2, label: "Teachers" },
-  { num: 3, label: "Generate" },
-  { num: 4, label: "Review" },
+  { num: 1, label: "基础设置" },
+  { num: 2, label: "教师分配" },
+  { num: 3, label: "智能生成" },
+  { num: 4, label: "课表预览" },
 ];
 
 export default function WizardSteps({ current }) {

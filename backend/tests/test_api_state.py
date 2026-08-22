@@ -3,8 +3,10 @@ from copy import deepcopy
 from fastapi.encoders import jsonable_encoder
 from fastapi.testclient import TestClient
 
-from factories import make_generation_state
+from factories import make_generation_state, make_two_class_state, place_lesson
+from repository import JsonRepository
 from server import create_app
+from validation import rebuild_resource_indexes
 
 
 CATALOG_FIELDS = (
@@ -25,6 +27,13 @@ def make_catalog_payload(base_revision):
             field: jsonable_encoder(getattr(state, field), by_alias=False)
             for field in CATALOG_FIELDS
         },
+    }
+
+
+def catalog_payload_from_state(state):
+    return {
+        "base_revision": state["revision"],
+        **{field: deepcopy(state[field]) for field in CATALOG_FIELDS},
     }
 
 
@@ -148,6 +157,184 @@ def test_catalog_update_cannot_break_a_historical_version(tmp_path):
 
     assert response.status_code == 422
     assert client.get("/api/state").json()["revision"] == 2
+
+
+def test_catalog_teacher_change_rebuilds_saved_resource_indexes(tmp_path):
+    client = prepared_client(tmp_path)
+    preview = generate_preview(client)
+    save_preview(client, preview)
+    before = client.get("/api/state").json()
+    payload = catalog_payload_from_state(before)
+    payload["teachers"].append(
+        {
+            "id": "teacher-math-replacement",
+            "name": "Replacement Math",
+            "qualified_subject_ids": ["subject-math"],
+            "teaching_assignment_ids": ["req-class1-math"],
+            "weekly_unavailable_slots": [],
+            "homeroom_class_id": None,
+            "main_subject_id": None,
+        }
+    )
+    for teacher in payload["teachers"]:
+        teacher["teaching_assignment_ids"] = [
+            req["id"]
+            for req in payload["course_requirements"]
+            if req["teacher_id"] == teacher["id"]
+        ]
+    target = next(
+        req
+        for req in payload["course_requirements"]
+        if req["id"] == "req-class1-math"
+    )
+    target["teacher_id"] = "teacher-math-replacement"
+    for teacher in payload["teachers"]:
+        teacher["teaching_assignment_ids"] = [
+            req["id"]
+            for req in payload["course_requirements"]
+            if req["teacher_id"] == teacher["id"]
+        ]
+
+    response = client.put("/api/catalog", json=payload)
+
+    assert response.status_code == 200
+    saved_version = response.json()["timetable_versions"][0]
+    used_slots = [
+        cell
+        for day in saved_version["teacher_schedules"]["teacher-math-replacement"]
+        for cell in day
+        if cell is not None
+    ]
+    assert used_slots
+    assert all(cell["target_id"] == "req-class1-math" for cell in used_slots)
+
+    # The class grids still place class 1 math in room 301.  The room index
+    # must be rebuilt from those cells too, including the new teacher, rather
+    # than retaining the pre-update assignment or a stale slot.
+    requirements_by_id = {
+        requirement["id"]: requirement
+        for requirement in payload["course_requirements"]
+    }
+    blocks_by_id = {
+        block["id"]: block for block in payload["split_course_blocks"]
+    }
+    expected_room_entries = {room_id: set() for room_id in ("room-301", "room-302")}
+    for class_id, schedule in saved_version["class_schedules"].items():
+        for weekday, day in enumerate(schedule):
+            for period, cell in enumerate(day):
+                if cell is None:
+                    continue
+                if cell["kind"] == "lesson":
+                    requirement = requirements_by_id[cell["requirement_id"]]
+                    if requirement["room_id"] in expected_room_entries:
+                        expected_room_entries[requirement["room_id"]].add(
+                            (
+                                weekday,
+                                period,
+                                requirement["id"],
+                                requirement["teacher_id"],
+                                (class_id,),
+                            )
+                        )
+                else:
+                    block = blocks_by_id[cell["split_block_id"]]
+                    for group in block["groups"]:
+                        if group["room_id"] in expected_room_entries:
+                            expected_room_entries[group["room_id"]].add(
+                                (
+                                    weekday,
+                                    period,
+                                    group["id"],
+                                    group["teacher_id"],
+                                    tuple(block["source_class_ids"]),
+                                )
+                            )
+
+    room_301 = saved_version["room_schedules"]["room-301"]
+    actual_room_301_entries = {
+        (weekday, period, cell["target_id"], cell["teacher_id"], tuple(cell["class_ids"]))
+        for weekday, day in enumerate(room_301)
+        for period, cell in enumerate(day)
+        if cell is not None
+    }
+    assert actual_room_301_entries == expected_room_entries["room-301"]
+    assert ("req-class1-math", "teacher-math-replacement") in {
+        (target_id, teacher_id)
+        for _, _, target_id, teacher_id, _ in actual_room_301_entries
+    }
+    assert ("req-class1-math", "teacher-li") not in {
+        (target_id, teacher_id)
+        for _, _, target_id, teacher_id, _ in actual_room_301_entries
+    }
+
+    # The other configured room contains only the split politics group; no
+    # stale ordinary lesson or reassigned math lesson may appear there.
+    room_302 = saved_version["room_schedules"]["room-302"]
+    actual_room_302_entries = {
+        (weekday, period, cell["target_id"], cell["teacher_id"], tuple(cell["class_ids"]))
+        for weekday, day in enumerate(room_302)
+        for period, cell in enumerate(day)
+        if cell is not None
+    }
+    assert actual_room_302_entries == expected_room_entries["room-302"]
+    assert ("split-group-politics", "teacher-wang") in {
+        (target_id, teacher_id)
+        for _, _, target_id, teacher_id, _ in actual_room_302_entries
+    }
+
+    for room_id, schedule in saved_version["room_schedules"].items():
+        for day in schedule:
+            for cell in day:
+                if cell is not None:
+                    assert cell["room_id"] == room_id
+
+
+def test_catalog_conflict_reports_version_location_and_preserves_state(tmp_path):
+    state, version = make_two_class_state()
+    place_lesson(version, "class-1", 0, 0, "req-class1-math")
+    place_lesson(version, "class-1", 1, 0, "req-class1-math")
+    place_lesson(version, "class-1", 0, 2, "req-class1-chinese")
+    place_lesson(version, "class-1", 1, 2, "req-class1-chinese")
+    place_lesson(version, "class-2", 0, 2, "req-class2-math-same-teacher")
+    place_lesson(version, "class-2", 1, 1, "req-class2-math-same-teacher")
+    place_lesson(version, "class-2", 0, 3, "req-class2-chinese")
+    place_lesson(version, "class-2", 1, 3, "req-class2-chinese")
+    state.timetable_versions = [rebuild_resource_indexes(state, version)]
+    data_path = tmp_path / "data.json"
+    JsonRepository(data_path).save(state, 0)
+    client = TestClient(create_app(data_path))
+    before = client.get("/api/state").json()
+    payload = catalog_payload_from_state(before)
+    target = next(
+        req
+        for req in payload["course_requirements"]
+        if req["id"] == "req-class1-chinese"
+    )
+    target["teacher_id"] = "teacher-li"
+    next(
+        teacher
+        for teacher in payload["teachers"]
+        if teacher["id"] == "teacher-li"
+    )["qualified_subject_ids"].append("subject-chinese")
+    for teacher in payload["teachers"]:
+        teacher["teaching_assignment_ids"] = [
+            req["id"]
+            for req in payload["course_requirements"]
+            if req["teacher_id"] == teacher["id"]
+        ]
+
+    response = client.put("/api/catalog", json=payload)
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    issue = next(
+        error for error in detail["errors"] if error["code"] == "teacher_double_booked"
+    )
+    assert issue["weekday"] == 0
+    assert issue["period"] == 2
+    assert version.id in issue["entity_ids"]
+    assert {"teacher-li", "class-1", "class-2"} <= set(issue["entity_ids"])
+    assert client.get("/api/state").json() == before
 
 
 def test_settings_update_mutates_only_settings(tmp_path):

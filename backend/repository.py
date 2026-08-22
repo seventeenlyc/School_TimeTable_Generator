@@ -8,10 +8,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from domain import AppState
+from domain import AppState, Subject
 
 
 DEFAULT_DATA_PATH = Path(__file__).resolve().parent / "data" / "timetable-data.json"
+
+DEFAULT_SUBJECT_OPTIONS = (
+    ("subject-art", "美术"),
+    ("subject-music", "音乐"),
+    ("subject-information", "信息"),
+    ("subject-general-technology", "通用技术"),
+)
 
 
 class RevisionConflict(Exception):
@@ -46,7 +53,8 @@ class JsonRepository:
             if not self.path.exists():
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 return self._write_initial_state()
-            return self._parse_state_file(self.path)
+            state = self._parse_state_file(self.path)
+            return self._ensure_default_subject_options(state)
 
     def save(self, state: AppState, base_revision: int) -> AppState:
         with self._lock:
@@ -115,9 +123,31 @@ class JsonRepository:
             return restored.copy(deep=True)
 
     def _write_initial_state(self) -> AppState:
-        state = AppState()
+        state = self._ensure_default_subject_options(AppState(), persist=False)
         self._atomic_write(state)
         return state.copy(deep=True)
+
+    def _ensure_default_subject_options(
+        self,
+        state: AppState,
+        *,
+        persist: bool = True,
+    ) -> AppState:
+        existing_ids = {subject.id for subject in state.subjects}
+        existing_names = {subject.name for subject in state.subjects}
+        changed = False
+
+        for subject_id, subject_name in DEFAULT_SUBJECT_OPTIONS:
+            if subject_id in existing_ids or subject_name in existing_names:
+                continue
+            state.subjects.append(Subject(id=subject_id, name=subject_name))
+            existing_ids.add(subject_id)
+            existing_names.add(subject_name)
+            changed = True
+
+        if changed and persist:
+            self._atomic_write(state)
+        return state
 
     @staticmethod
     def _validate_state(state: AppState) -> AppState:

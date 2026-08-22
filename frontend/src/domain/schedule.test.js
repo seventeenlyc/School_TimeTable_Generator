@@ -73,13 +73,32 @@ describe("schedule formatting and indexes", () => {
     });
   });
 
+  it("applies normal lesson move to empty slot", () => {
+    const classSchedules = {
+      "class-1": [
+        [{ kind: "lesson", requirement_id: "req-math" }, null],
+      ],
+    };
+
+    const moved = applyCellMove(
+      classSchedules,
+      "class-1",
+      { day: 0, period: 0 },
+      { day: 0, period: 1 },
+      indexes
+    );
+
+    expect(moved["class-1"][0][1]).toEqual({ kind: "lesson", requirement_id: "req-math" });
+    expect(moved["class-1"][0][0]).toBeNull();
+  });
+
   it("applies split move synchronously across all source classes", () => {
     const classSchedules = {
       "class-1": [
-        [{ kind: "split", split_block_id: "split-geo-pol" }, { kind: "empty" }],
+        [{ kind: "split", split_block_id: "split-geo-pol" }, null],
       ],
       "class-2": [
-        [{ kind: "split", split_block_id: "split-geo-pol" }, { kind: "empty" }],
+        [{ kind: "split", split_block_id: "split-geo-pol" }, null],
       ],
     };
 
@@ -92,9 +111,9 @@ describe("schedule formatting and indexes", () => {
     );
 
     expect(moved["class-1"][0][1].split_block_id).toBe("split-geo-pol");
-    expect(moved["class-1"][0][0].kind).toBe("empty");
+    expect(moved["class-1"][0][0]).toBeNull();
     // Class 2 must also have been synchronized
     expect(moved["class-2"][0][1].split_block_id).toBe("split-geo-pol");
-    expect(moved["class-2"][0][0].kind).toBe("empty");
+    expect(moved["class-2"][0][0]).toBeNull();
   });
 });

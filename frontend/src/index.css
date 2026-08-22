@@ -1,5 +1,33 @@
 @import "tailwindcss";
 
+@keyframes catalog-record-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+    border-color: rgb(16 185 129 / .9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes catalog-error-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(244 63 94 / 0); }
+  40% { box-shadow: 0 0 0 4px rgb(244 63 94 / .45); }
+}
+
+.catalog-record-enter { animation: catalog-record-enter 400ms ease-out; }
+.catalog-error-highlight {
+  animation: catalog-error-pulse 500ms ease-in-out 3;
+  border-color: rgb(244 63 94 / .9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalog-record-enter,
+  .catalog-error-highlight { animation: none; }
+}
+
 html, body {
   background-color: #030814 !important;
   margin: 0;

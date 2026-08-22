@@ -17,6 +17,53 @@ def test_first_load_creates_a_valid_empty_state(tmp_path: Path):
     stored = json.loads((tmp_path / "timetable-data.json").read_text("utf-8"))
     assert stored["schemaVersion"] == 1
     assert stored["revision"] == 0
+    assert {subject.name for subject in state.subjects} == {
+        "美术",
+        "音乐",
+        "信息",
+        "通用技术",
+    }
+
+
+def test_existing_state_is_migrated_with_default_subject_options(tmp_path: Path):
+    path = tmp_path / "timetable-data.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "revision": 7,
+                "settings": {},
+                "teachers": [],
+                "classes": [],
+                "subjects": [],
+                "rooms": [],
+                "courseRequirements": [],
+                "splitCourseBlocks": [],
+                "timetableVersions": [],
+                "changeEvents": [],
+                "appliedChanges": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    state = JsonRepository(path).load()
+
+    assert state.revision == 7
+    assert {subject.name for subject in state.subjects} == {
+        "美术",
+        "音乐",
+        "信息",
+        "通用技术",
+    }
+    stored = json.loads(path.read_text("utf-8"))
+    assert stored["revision"] == 7
+    assert {subject["name"] for subject in stored["subjects"]} == {
+        "美术",
+        "音乐",
+        "信息",
+        "通用技术",
+    }
 
 
 def test_save_is_revision_checked_and_creates_a_backup(tmp_path: Path):

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../api/client";
 import { AlertTriangle, RefreshCw, RotateCcw, ShieldCheck } from "lucide-react";
+import AsyncButton from "../../components/AsyncButton";
 
 export default function RecoveryPanel({ onRestored }) {
   const [backups, setBackups] = useState([]);
@@ -142,14 +143,15 @@ export default function RecoveryPanel({ onRestored }) {
                 >
                   取消
                 </button>
-                <button
+                <AsyncButton
                   disabled={restoring}
                   onClick={handleRestore}
+                  loading={restoring}
+                  loadingLabel="恢复中…"
                   className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white text-sm font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-red-600/30 animate-pulse"
                 >
-                  <RotateCcw size={16} className={restoring ? "animate-spin" : ""} />
-                  {restoring ? "正在恢复..." : "确认恢复"}
-                </button>
+                  <RotateCcw size={16} /> 确认恢复
+                </AsyncButton>
               </div>
             )}
           </div>
