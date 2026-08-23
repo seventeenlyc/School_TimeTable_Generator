@@ -1,4 +1,7 @@
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
+
+const SPREADSHEETML_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
 const TEACHER_HEADERS = ["教师姓名", "班主任班级", "主教学科"];
 const REQUIREMENT_HEADERS = [
@@ -299,10 +302,61 @@ function deduplicateRows(rows, keyFor, conflictErrorFor) {
   return { rows: uniqueRows, errors, skipped };
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeSpreadsheetXmlNamespace(xml) {
+  const namespacePattern = new RegExp(
+    `xmlns:([A-Za-z_][\\w.-]*)=(["'])${escapeRegExp(SPREADSHEETML_NAMESPACE)}\\2`,
+    "g",
+  );
+  const prefixes = [...xml.matchAll(namespacePattern)].map((match) => match[1]);
+  if (!prefixes.length) return xml;
+
+  const hasDefaultNamespace = new RegExp(
+    `xmlns=(["'])${escapeRegExp(SPREADSHEETML_NAMESPACE)}\\1`,
+  ).test(xml);
+  let normalized = xml;
+  prefixes.forEach((prefix, index) => {
+    const declaration = new RegExp(
+      `\\s+xmlns:${escapeRegExp(prefix)}=(["'])${escapeRegExp(SPREADSHEETML_NAMESPACE)}\\1`,
+      "g",
+    );
+    normalized = normalized.replace(
+      declaration,
+      !hasDefaultNamespace && index === 0 ? ` xmlns="${SPREADSHEETML_NAMESPACE}"` : "",
+    );
+    normalized = normalized.replace(
+      new RegExp(`<(\\/?)${escapeRegExp(prefix)}:`, "g"),
+      "<$1",
+    );
+  });
+  return normalized;
+}
+
+async function normalizeSpreadsheetXmlNamespaces(arrayBuffer) {
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  const workbookEntry = zip.file("xl/workbook.xml");
+  if (!workbookEntry) return arrayBuffer;
+
+  const workbookXml = await workbookEntry.async("string");
+  if (normalizeSpreadsheetXmlNamespace(workbookXml) === workbookXml) return arrayBuffer;
+
+  await Promise.all(Object.values(zip.files).map(async (entry) => {
+    if (entry.dir || !entry.name.endsWith(".xml")) return;
+    const xml = await entry.async("string");
+    const normalized = normalizeSpreadsheetXmlNamespace(xml);
+    if (normalized !== xml) zip.file(entry.name, normalized);
+  }));
+  return zip.generateAsync({ type: "arraybuffer" });
+}
+
 async function loadWorkbook(arrayBuffer, fileType, fileName) {
   const workbook = new ExcelJS.Workbook();
   try {
-    await workbook.xlsx.load(arrayBuffer);
+    const compatibleBuffer = await normalizeSpreadsheetXmlNamespaces(arrayBuffer);
+    await workbook.xlsx.load(compatibleBuffer);
     return { workbook, errors: [] };
   } catch (error) {
     return {

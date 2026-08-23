@@ -8,6 +8,7 @@ from domain import (
     Room,
     SchoolClass,
     Settings,
+    Slot,
     SplitCourseBlock,
     SplitCourseGroup,
     Subject,
@@ -25,8 +26,8 @@ def test_smoke_end_to_end_workflow(tmp_path: Path):
     app = create_app(data_file)
     client = TestClient(app)
 
-    # 初始化 settings (4 slots/day, 6 working days)
-    settings = Settings(periods_per_day=4, working_days=6)
+    # 初始化 settings (4 slots/day, 5 working days)
+    settings = Settings(periods_per_day=4, working_days=5)
     resp = client.put("/api/settings", json={"base_revision": 0, "settings": settings.dict()})
     assert resp.status_code == 200, resp.text
     state_data = resp.json()
@@ -101,32 +102,44 @@ def test_smoke_end_to_end_workflow(tmp_path: Path):
             class_id="class-1",
             subject_id="subject-math",
             teacher_id="teacher-li",
-            periods_per_week=2,
+            periods_per_week=3,
             consecutive_periods=1,
+            fixed_slots=[Slot(weekday=0, period=0)],
         ),
         CourseRequirement(
             id="req-class1-chinese",
             class_id="class-1",
             subject_id="subject-chinese",
             teacher_id="teacher-chen",
-            periods_per_week=2,
+            periods_per_week=3,
             consecutive_periods=1,
+            fixed_slots=[Slot(weekday=0, period=1)],
         ),
         CourseRequirement(
             id="req-class2-math",
             class_id="class-2",
             subject_id="subject-math",
             teacher_id="teacher-li",
-            periods_per_week=2,
+            periods_per_week=3,
             consecutive_periods=1,
+            fixed_slots=[
+                Slot(weekday=1, period=0),
+                Slot(weekday=2, period=0),
+                Slot(weekday=3, period=0),
+            ],
         ),
         CourseRequirement(
             id="req-class2-chinese",
             class_id="class-2",
             subject_id="subject-chinese",
             teacher_id="teacher-chen",
-            periods_per_week=2,
+            periods_per_week=3,
             consecutive_periods=1,
+            fixed_slots=[
+                Slot(weekday=1, period=1),
+                Slot(weekday=2, period=1),
+                Slot(weekday=3, period=1),
+            ],
         ),
     ]
 

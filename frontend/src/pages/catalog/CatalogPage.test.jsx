@@ -82,7 +82,7 @@ describe("CatalogPage", () => {
   const createMockState = () => ({
     revision: 1,
     settings: {
-      working_days: 6,
+      working_days: 5,
       periods_per_day: 8,
       long_absence_days: 28,
       max_daily_subject_periods: 2,
@@ -600,8 +600,8 @@ describe("CatalogPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /系统设置|排课设置/i }));
 
-    // working_days fixed to 6
-    const workingDaysDisplay = screen.getByText(/6\s*天|周一至周六/i);
+    // working_days fixed to 5
+    const workingDaysDisplay = screen.getByText(/5\s*天|周一至周五/i);
     expect(workingDaysDisplay).toBeInTheDocument();
 
     const periodsInput = screen.getByRole("spinbutton", { name: /每日节数|每日课时/i });
@@ -614,7 +614,7 @@ describe("CatalogPage", () => {
       expect(api.updateSettings).toHaveBeenCalledWith({
         base_revision: 1,
         settings: expect.objectContaining({
-          working_days: 6,
+          working_days: 5,
           periods_per_day: 7,
         }),
       });
@@ -721,7 +721,6 @@ describe("CatalogPage", () => {
       "星期三",
       "星期四",
       "星期五",
-      "星期六",
     ]);
     expect(periodInputs.map((input) => input.value)).toEqual(["1", "2"]);
     expect(periodInputs.every((input) => input.max === "8")).toBe(true);

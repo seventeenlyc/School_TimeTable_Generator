@@ -199,7 +199,7 @@ describe("TimetablePage", () => {
   });
 
   it("renders teacher weekly timetable with normal and split lessons", async () => {
-    const emptyGrid = () => Array.from({ length: 6 }, () => Array(3).fill(null));
+    const emptyGrid = () => Array.from({ length: 5 }, () => Array(3).fill(null));
 
     const teacherGrid = emptyGrid();
     teacherGrid[0][0] = {
@@ -221,6 +221,7 @@ describe("TimetablePage", () => {
 
     api.getState.mockResolvedValue({
       revision: 1,
+      settings: { working_days: 5, periods_per_day: 3 },
       classes: [
         { id: "c1", name: "高一(1)班" },
         { id: "c2", name: "高一(2)班" },
@@ -298,13 +299,13 @@ describe("TimetablePage", () => {
     // 不再出现“教师周课表视图”占位文案
     expect(screen.queryByText("教师周课表视图")).not.toBeInTheDocument();
 
-    // 显示周一到周六和第1/第2节
+    // 只显示周一到周五和第1/第2节
     expect(screen.getByRole("columnheader", { name: "周一" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "周二" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "周三" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "周四" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "周五" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "周六" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "周六" })).not.toBeInTheDocument();
     expect(screen.getByRole("cell", { name: /第 1 节/i })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: /第 2 节/i })).toBeInTheDocument();
 

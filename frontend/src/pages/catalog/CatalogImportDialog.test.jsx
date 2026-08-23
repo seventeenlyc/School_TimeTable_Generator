@@ -1,6 +1,6 @@
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CatalogImportDialog from "./CatalogImportDialog";
 import { parseRequirementWorkbook, parseTeacherWorkbook } from "./excelCatalogImport";
 import { planCatalogImport } from "./catalogImportMerge";
@@ -173,6 +173,29 @@ describe("CatalogImportDialog", () => {
       errors: [parserError],
     }));
     expect(screen.getByRole("button", { name: "应用到草稿" })).toBeDisabled();
+  });
+
+  it("parses two selected workbooks sequentially to avoid ExcelJS parser races", async () => {
+    let resolveTeacher;
+    parseTeacherWorkbook.mockReturnValueOnce(new Promise((resolve) => {
+      resolveTeacher = resolve;
+    }));
+
+    render(<CatalogImportDialog form={form} open onApply={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("教师信息 Excel"), {
+      target: { files: [createFile("教师.xlsx")] },
+    });
+    fireEvent.change(screen.getByLabelText("课程要求 Excel"), {
+      target: { files: [createFile("课程要求.xlsx")] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "解析并预览" }));
+
+    await waitFor(() => expect(parseTeacherWorkbook).toHaveBeenCalledTimes(1));
+    expect(parseRequirementWorkbook).not.toHaveBeenCalled();
+
+    resolveTeacher({ rows: [], errors: [], skipped: 0 });
+    await waitFor(() => expect(parseRequirementWorkbook).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole("button", { name: "应用到草稿" })).toBeEnabled();
   });
 
   it("closes without applying and resets local preview when reopened", async () => {

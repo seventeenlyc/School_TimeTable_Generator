@@ -5,7 +5,7 @@ export function createId(prefix = "id") {
 export function catalogFromState(state) {
   return {
     settings: state?.settings || {
-      working_days: 6,
+      working_days: 5,
       periods_per_day: 8,
     },
     classes: state?.classes ? state.classes.map((c) => ({ ...c })) : [],
@@ -59,7 +59,7 @@ export function validateCatalogForm(form, explicitSettings) {
   const splitCourseBlocks = form.split_course_blocks || [];
 
   const settings = explicitSettings || form.settings || {};
-  const workingDays = typeof settings.working_days === "number" && settings.working_days > 0 ? settings.working_days : 6;
+  const workingDays = typeof settings.working_days === "number" && settings.working_days > 0 ? settings.working_days : 5;
   const periodsPerDay = typeof settings.periods_per_day === "number" && settings.periods_per_day > 0 ? settings.periods_per_day : 8;
   const maxWeeklyPeriods = workingDays * periodsPerDay;
 

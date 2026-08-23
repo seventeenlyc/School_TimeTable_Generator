@@ -33,8 +33,8 @@ _CACHED_DEMO_STATE: Optional[AppState] = None
 def _create_raw_demo_state() -> AppState:
     settings = Settings(
         periods_per_day=8,
-        working_days=6,
-        max_daily_subject_periods=1,
+        working_days=5,
+        max_daily_subject_periods=2,
     )
 
     # 1. Subjects
@@ -182,7 +182,7 @@ def _create_raw_demo_state() -> AppState:
                         class_id=cid,
                         subject_id=subject_id,
                         teacher_id=teacher_id,
-                        periods_per_week=6,
+                        periods_per_week=(6 if subj_key == "math" else 5),
                         room_id=f"room-class-{int(cid.split('-')[1]):02d}",
                         consecutive_periods=1,
                         fixed_slots=[],
@@ -220,7 +220,7 @@ def _create_raw_demo_state() -> AppState:
         id="split-geo-pol-14-15",
         name="14-15班地理政治走班",
         source_class_ids=["class-14", "class-15"],
-        periods_per_week=6,
+        periods_per_week=5,
         groups=[
             SplitCourseGroup(
                 id="group-geography",

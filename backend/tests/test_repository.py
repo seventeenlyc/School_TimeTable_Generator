@@ -66,6 +66,61 @@ def test_existing_state_is_migrated_with_default_subject_options(tmp_path: Path)
     }
 
 
+def test_legacy_six_day_state_is_migrated_to_five_days(tmp_path: Path):
+    path = tmp_path / "timetable-data.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "revision": 8,
+                "settings": {
+                    "workingDays": 6,
+                    "periodsPerDay": 9,
+                    "longAbsenceDays": 28,
+                    "maxDailySubjectPeriods": 2,
+                    "backupLimit": 20,
+                },
+                "teachers": [
+                    {
+                        "id": "teacher-fixed",
+                        "name": "固定活动",
+                        "qualifiedSubjectIds": ["subject-self-study"],
+                        "teachingAssignmentIds": ["requirement-saturday"],
+                        "weeklyUnavailableSlots": [{"weekday": 5, "period": 0}],
+                    }
+                ],
+                "classes": [{"id": "class-1", "name": "1班"}],
+                "subjects": [{"id": "subject-self-study", "name": "自习（固定活动）"}],
+                "rooms": [],
+                "courseRequirements": [
+                    {
+                        "id": "requirement-saturday",
+                        "classId": "class-1",
+                        "subjectId": "subject-self-study",
+                        "teacherId": "teacher-fixed",
+                        "periodsPerWeek": 1,
+                        "consecutivePeriods": 1,
+                        "fixedSlots": [{"weekday": 5, "period": 8}],
+                    }
+                ],
+                "splitCourseBlocks": [],
+                "timetableVersions": [],
+                "changeEvents": [],
+                "appliedChanges": [],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    state = JsonRepository(path).load()
+
+    assert state.settings.working_days == 5
+    assert state.teachers[0].weekly_unavailable_slots == []
+    assert state.teachers[0].teaching_assignment_ids == []
+    assert state.course_requirements == []
+
+
 def test_save_is_revision_checked_and_creates_a_backup(tmp_path: Path):
     repository = JsonRepository(tmp_path / "timetable-data.json")
     first = repository.load()

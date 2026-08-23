@@ -2,7 +2,7 @@ import React from "react";
 import { formatCell } from "../domain/schedule";
 import { User, MapPin, Sparkles } from "lucide-react";
 
-const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六"];
+const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五"];
 
 export default function ScheduleGrid({
   grid = [],
@@ -33,7 +33,7 @@ export default function ScheduleGrid({
               <td className="py-3 px-4 text-center font-mono font-medium text-slate-400 bg-slate-800/40">
                 第 {periodIdx + 1} 节
               </td>
-              {Array.from({ length: 6 }).map((_, dayIdx) => {
+              {WEEKDAYS.map((_, dayIdx) => {
                 const cell = grid[dayIdx]?.[periodIdx] || { kind: "empty" };
                 const overrideKey = `${dayIdx}_${periodIdx}`;
                 const override = dateOverrides[overrideKey];

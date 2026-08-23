@@ -177,3 +177,15 @@ backend/data/
 # Pipenv/Poetry
 Pipfile.lock
 poetry.lock
+
+# Uploaded / imported real data (never commit)
+.dsh-uploads/
+*.xlsx
+
+# Desktop build output
+release/
+electron/node_modules/
+electron/python-embed/
+
+# Standalone usage-doc copy (generated artifact)
+使用说明-独立副本/

@@ -33,6 +33,41 @@ class GenerationError(RuntimeError):
 
 
 VariableKey = Tuple[str, int, int]
+DAILY_REQUIRED_SUBJECT_NAMES = frozenset({"语文", "数学", "英语"})
+SINGLE_DAILY_CORE_SUBJECT_NAMES = frozenset({"语文", "英语"})
+ELECTIVE_SUBJECT_NAMES = frozenset({"物理", "化学", "生物", "历史", "政治", "地理"})
+
+
+def _matches_subject_family(subject_name: str, families: frozenset[str]) -> bool:
+    return any(
+        subject_name == family or subject_name.startswith(f"{family}（")
+        for family in families
+    )
+
+
+def _subject_family(subject_name: str, families: frozenset[str]) -> Optional[str]:
+    return next(
+        (
+            family
+            for family in families
+            if subject_name == family or subject_name.startswith(f"{family}（")
+        ),
+        None,
+    )
+
+
+def _classes_with_complete_core(state: AppState) -> set[str]:
+    subject_names = {subject.id: subject.name for subject in state.subjects}
+    names_by_class: DefaultDict[str, set[str]] = defaultdict(set)
+    for requirement in state.course_requirements:
+        subject_name = subject_names.get(requirement.subject_id, "")
+        if subject_name in DAILY_REQUIRED_SUBJECT_NAMES:
+            names_by_class[requirement.class_id].add(subject_name)
+    return {
+        class_id
+        for class_id, names in names_by_class.items()
+        if DAILY_REQUIRED_SUBJECT_NAMES.issubset(names)
+    }
 
 
 def generate_base_timetable(
@@ -301,6 +336,8 @@ def _add_daily_subject_constraints(
     normal: Dict[VariableKey, cp_model.IntVar],
     split: Dict[VariableKey, cp_model.IntVar],
 ) -> None:
+    subject_names = {subject.id: subject.name for subject in state.subjects}
+    classes_with_complete_core = _classes_with_complete_core(state)
     requirements_by_subject: DefaultDict[
         Tuple[str, str], List[CourseRequirement]
     ] = defaultdict(list)
@@ -310,25 +347,80 @@ def _add_daily_subject_constraints(
         ].append(requirement)
 
     for (class_id, subject_id), requirements in requirements_by_subject.items():
+        subject_name = subject_names.get(subject_id, "")
         for day in range(state.settings.working_days):
             variables = [
                 normal[(requirement.id, day, period)]
                 for requirement in requirements
                 for period in range(state.settings.periods_per_day)
             ]
-            model.Add(
-                sum(variables) <= state.settings.max_daily_subject_periods
-            )
+            daily_total = sum(variables)
+            if (
+                class_id in classes_with_complete_core
+                and subject_name in DAILY_REQUIRED_SUBJECT_NAMES
+            ):
+                model.Add(daily_total >= 1)
+            if (
+                subject_name in SINGLE_DAILY_CORE_SUBJECT_NAMES
+                or _matches_subject_family(subject_name, ELECTIVE_SUBJECT_NAMES)
+            ):
+                model.Add(daily_total <= 1)
+            else:
+                model.Add(daily_total <= state.settings.max_daily_subject_periods)
 
     for block in state.split_course_blocks:
+        elective_block = any(
+            _matches_subject_family(subject_names.get(group.subject_id, ""), ELECTIVE_SUBJECT_NAMES)
+            for group in block.groups
+        )
         for day in range(state.settings.working_days):
             variables = [
                 split[(block.id, day, period)]
                 for period in range(state.settings.periods_per_day)
             ]
             model.Add(
-                sum(variables) <= state.settings.max_daily_subject_periods
+                sum(variables)
+                <= (1 if elective_block else state.settings.max_daily_subject_periods)
             )
+
+    elective_variables: DefaultDict[
+        Tuple[str, str, int], List[cp_model.IntVar]
+    ] = defaultdict(list)
+    for requirement in state.course_requirements:
+        family = _subject_family(
+            subject_names.get(requirement.subject_id, ""),
+            ELECTIVE_SUBJECT_NAMES,
+        )
+        if family is None:
+            continue
+        for day in range(state.settings.working_days):
+            elective_variables[(requirement.class_id, family, day)].extend(
+                normal[(requirement.id, day, period)]
+                for period in range(state.settings.periods_per_day)
+            )
+
+    for block in state.split_course_blocks:
+        families = {
+            family
+            for group in block.groups
+            if (
+                family := _subject_family(
+                    subject_names.get(group.subject_id, ""),
+                    ELECTIVE_SUBJECT_NAMES,
+                )
+            )
+            is not None
+        }
+        for class_id in block.source_class_ids:
+            for family in families:
+                for day in range(state.settings.working_days):
+                    elective_variables[(class_id, family, day)].extend(
+                        split[(block.id, day, period)]
+                        for period in range(state.settings.periods_per_day)
+                    )
+
+    for variables in elective_variables.values():
+        model.Add(sum(variables) <= 1)
 
 
 def _add_soft_objective_terms(
@@ -530,21 +622,60 @@ def _diagnose_infeasibility(
         state.settings.working_days
         * state.settings.max_daily_subject_periods
     )
+    classes_with_complete_core = _classes_with_complete_core(state)
     for (class_id, subject_id), required in daily_subject_load.items():
-        if required > subject_capacity:
+        subject_name = next(
+            (subject.name for subject in state.subjects if subject.id == subject_id),
+            "",
+        )
+        effective_capacity = state.settings.working_days if (
+            subject_name in SINGLE_DAILY_CORE_SUBJECT_NAMES
+            or _matches_subject_family(subject_name, ELECTIVE_SUBJECT_NAMES)
+        ) else subject_capacity
+        if required > effective_capacity:
             diagnostics.append(
                 GenerationDiagnostic(
                     code="daily_subject_capacity",
                     message=(
                         f"Subject {subject_id} for class {class_id} requires "
-                        f"{required} slots but only {subject_capacity} satisfy "
+                        f"{required} slots but only {effective_capacity} satisfy "
                         "the daily subject limit"
                     ),
                     entity_ids=[class_id, subject_id],
                     required=required,
-                    available=subject_capacity,
+                    available=effective_capacity,
                 )
             )
+
+        if (
+            class_id in classes_with_complete_core
+            and subject_name in DAILY_REQUIRED_SUBJECT_NAMES
+        ):
+            fixed_by_day: DefaultDict[int, int] = defaultdict(int)
+            for requirement in state.course_requirements:
+                if (
+                    requirement.class_id == class_id
+                    and requirement.subject_id == subject_id
+                ):
+                    for slot in requirement.fixed_slots:
+                        fixed_by_day[slot.weekday] += 1
+            minimum_with_fixed_slots = sum(
+                max(1, fixed_by_day[day])
+                for day in range(state.settings.working_days)
+            )
+            if required < minimum_with_fixed_slots:
+                diagnostics.append(
+                    GenerationDiagnostic(
+                        code="daily_required_subject",
+                        message=(
+                            f"Subject {subject_id} for class {class_id} cannot "
+                            "appear on every weekday with its fixed slots"
+                        ),
+                        entity_ids=[class_id, subject_id],
+                        required=minimum_with_fixed_slots,
+                        available=required,
+                    )
+                )
 
     for requirement in state.course_requirements:
         block_size = requirement.consecutive_periods

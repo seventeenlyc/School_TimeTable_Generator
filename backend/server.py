@@ -2,9 +2,16 @@ from __future__ import annotations
 
 import copy
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+# 嵌入式 Python（_pth 隔离模式）不会自动把脚本目录加入 sys.path，
+# 这里显式加入，确保 `import api_models` 等本地模块在任何环境下可用。
+_SERVER_DIR = Path(__file__).resolve().parent
+if str(_SERVER_DIR) not in sys.path:
+    sys.path.insert(0, str(_SERVER_DIR))
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
@@ -660,10 +667,35 @@ def create_app(
     app = FastAPI(title="Local Timetable API")
     app.state.repository = JsonRepository(data_path or DEFAULT_DATA_PATH)
     configure_cors(app)
+
+    # --- 健康检查端点（供 Electron 启动探测） ---
+    @app.get("/api/health")
+    async def health_check():
+        return {"status": "ok"}
+
     register_routes(app)
     register_static_routes(app, frontend_dist or DEFAULT_FRONTEND_DIST)
     register_error_handlers(app)
     return app
+
+
+def _resolve_paths():
+    """从环境变量与 CLI 参数解析数据路径与前端目录。"""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Local Timetable API Server")
+    parser.add_argument("--host", default="0.0.0.0", help="监听地址")
+    parser.add_argument("--port", type=int, default=8000, help="监听端口")
+    parser.add_argument("--frontend-dist", default=None, help="前端静态文件目录")
+    args = parser.parse_args()
+
+    data_dir = os.environ.get("TIMETABLE_DATA_DIR")
+    data_path = Path(data_dir) / "timetable-data.json" if data_dir else None
+    if data_path and not data_path.parent.exists():
+        data_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fe_dist = Path(args.frontend_dist) if args.frontend_dist else None
+    return args.host, args.port, data_path, fe_dist
 
 
 app = create_app()
@@ -672,4 +704,6 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    host, port, data_path, fe_dist = _resolve_paths()
+    _app = create_app(data_path=data_path, frontend_dist=fe_dist)
+    uvicorn.run(_app, host=host, port=port)

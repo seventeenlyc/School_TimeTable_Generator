@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
@@ -169,9 +170,86 @@ class JsonRepository:
     @staticmethod
     def _parse_state_file(path: Path) -> AppState:
         try:
-            return AppState.parse_raw(path.read_text(encoding="utf-8"))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("state root must be an object")
+            JsonRepository._migrate_legacy_workweek(payload)
+            return AppState.parse_obj(payload)
         except (OSError, ValueError) as exc:
             raise DataFileError(f"cannot read valid state from {path}: {exc}") from exc
+
+    @staticmethod
+    def _migrate_legacy_workweek(payload: dict) -> None:
+        settings = payload.setdefault("settings", {})
+        working_days_key = (
+            "workingDays" if "workingDays" in settings else "working_days"
+        )
+        if settings.get(working_days_key, 5) != 6:
+            return
+
+        settings[working_days_key] = 5
+        subjects = {
+            subject.get("id"): subject.get("name")
+            for subject in payload.get("subjects", [])
+        }
+        requirements_key = (
+            "courseRequirements"
+            if "courseRequirements" in payload
+            else "course_requirements"
+        )
+        requirements = payload.get(requirements_key, [])
+        removed_requirement_ids = {
+            requirement.get("id")
+            for requirement in requirements
+            if subjects.get(
+                requirement.get("subjectId", requirement.get("subject_id"))
+            )
+            == "自习（固定活动）"
+        }
+
+        for teacher in payload.get("teachers", []):
+            slots_key = (
+                "weeklyUnavailableSlots"
+                if "weeklyUnavailableSlots" in teacher
+                else "weekly_unavailable_slots"
+            )
+            teacher[slots_key] = [
+                slot
+                for slot in teacher.get(slots_key, [])
+                if slot.get("weekday", 0) < 5
+            ]
+            assignments_key = (
+                "teachingAssignmentIds"
+                if "teachingAssignmentIds" in teacher
+                else "teaching_assignment_ids"
+            )
+            teacher[assignments_key] = [
+                assignment_id
+                for assignment_id in teacher.get(assignments_key, [])
+                if assignment_id not in removed_requirement_ids
+            ]
+
+        retained_requirements = []
+        for requirement in requirements:
+            if requirement.get("id") in removed_requirement_ids:
+                continue
+            slots_key = "fixedSlots" if "fixedSlots" in requirement else "fixed_slots"
+            requirement[slots_key] = [
+                slot
+                for slot in requirement.get(slots_key, [])
+                if slot.get("weekday", 0) < 5
+            ]
+            retained_requirements.append(requirement)
+        payload[requirements_key] = retained_requirements
+
+        versions_key = (
+            "timetableVersions"
+            if "timetableVersions" in payload
+            else "timetable_versions"
+        )
+        applied_key = "appliedChanges" if "appliedChanges" in payload else "applied_changes"
+        payload[versions_key] = []
+        payload[applied_key] = []
 
     def _atomic_write(self, state: AppState) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

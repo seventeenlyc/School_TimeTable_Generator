@@ -1,6 +1,6 @@
 import pytest
 
-from domain import CourseRequirement, LessonCell, SchoolClass, Slot, Teacher
+from domain import CourseRequirement, LessonCell, SchoolClass, Slot, Subject, Teacher
 from factories import make_two_class_state, place_lesson, place_split
 from validation import (
     ScheduleValidationError,
@@ -145,6 +145,57 @@ def test_daily_subject_cap_is_reported():
     report = validate_timetable_version(state, version)
 
     assert "daily_subject_limit" in error_codes(report)
+
+
+def test_chinese_is_limited_to_one_period_per_day_when_global_cap_is_two():
+    state, version = make_two_class_state()
+    state.settings.max_daily_subject_periods = 2
+    place_lesson(version, "class-1", 0, 0, "req-class1-chinese")
+    place_lesson(version, "class-1", 0, 1, "req-class1-chinese")
+
+    report = validate_timetable_version(state, version)
+
+    assert "daily_subject_limit" in error_codes(report)
+
+
+def test_missing_daily_core_subject_is_reported():
+    state, version = make_two_class_state()
+    state.subjects.append(Subject(id="subject-english", name="英语"))
+    state.teachers.append(
+        Teacher(
+            id="teacher-english",
+            name="英语教师",
+            qualified_subject_ids=["subject-english"],
+            teaching_assignment_ids=["req-class1-english"],
+        )
+    )
+    state.course_requirements.append(
+        CourseRequirement(
+            id="req-class1-english",
+            class_id="class-1",
+            subject_id="subject-english",
+            teacher_id="teacher-english",
+            periods_per_week=5,
+        )
+    )
+    place_lesson(version, "class-1", 0, 0, "req-class1-chinese")
+    place_lesson(version, "class-1", 0, 1, "req-class1-chinese")
+
+    report = validate_timetable_version(state, version)
+
+    assert "daily_required_subject_missing" in error_codes(report)
+
+
+def test_elective_subject_is_limited_to_one_period_per_day():
+    state, version = make_two_class_state()
+    chinese = next(subject for subject in state.subjects if subject.id == "subject-chinese")
+    chinese.name = "物理"
+    place_lesson(version, "class-1", 0, 0, "req-class1-chinese")
+    place_lesson(version, "class-1", 0, 1, "req-class1-chinese")
+
+    report = validate_timetable_version(state, version)
+
+    assert "elective_daily_subject_limit" in error_codes(report)
 
 
 def test_broken_consecutive_requirement_is_reported():
@@ -425,7 +476,7 @@ def test_missing_fixed_slot_is_reported():
 
 def test_split_daily_subject_limit_is_reported():
     state, version = make_two_class_state()
-    state.settings.max_daily_subject_periods = 1
+    state.settings.max_daily_subject_periods = 2
     block = state.split_course_blocks[0]
     place_split(version, block, 0, 0)
     place_split(version, block, 0, 1)
@@ -433,3 +484,25 @@ def test_split_daily_subject_limit_is_reported():
     report = validate_timetable_version(state, version)
 
     assert "split_daily_subject_limit" in error_codes(report)
+
+
+def test_elective_limit_combines_normal_and_split_cells_in_validation():
+    state, version = make_two_class_state()
+    state.course_requirements.append(
+        CourseRequirement(
+            id="req-class1-geography-extra",
+            class_id="class-1",
+            subject_id="subject-geography",
+            teacher_id="teacher-zhang",
+            periods_per_week=1,
+        )
+    )
+    next(
+        teacher for teacher in state.teachers if teacher.id == "teacher-zhang"
+    ).teaching_assignment_ids.append("req-class1-geography-extra")
+    place_lesson(version, "class-1", 0, 0, "req-class1-geography-extra")
+    place_split(version, state.split_course_blocks[0], 0, 1)
+
+    report = validate_timetable_version(state, version)
+
+    assert "elective_daily_subject_limit" in error_codes(report)

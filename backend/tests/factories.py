@@ -24,7 +24,7 @@ from domain import (
 from validation import rebuild_resource_indexes
 
 
-WORKING_DAYS = 6
+WORKING_DAYS = 5
 PERIODS_PER_DAY = 4
 
 

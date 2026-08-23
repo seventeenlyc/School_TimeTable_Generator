@@ -53,7 +53,7 @@ def monday_of(value: date) -> date:
 def iter_school_dates(start: date, end: date) -> Iterator[date]:
     current = start
     while current <= end:
-        if current.weekday() <= 5:
+        if current.weekday() < 5:
             yield current
         current += timedelta(days=1)
 
@@ -73,7 +73,7 @@ def get_active_version(state: AppState, on_date: date) -> TimetableVersion:
 
 
 def resolve_day(state: AppState, on_date: date) -> ResolvedDay:
-    if on_date.weekday() == 6:
+    if on_date.weekday() >= state.settings.working_days:
         return ResolvedDay(
             date=on_date,
             version_id=None,
@@ -119,7 +119,7 @@ def resolve_week(state: AppState, monday: date) -> List[ResolvedDay]:
         raise ValueError("monday must be a Monday")
     return [
         resolve_day(state, monday + timedelta(days=offset))
-        for offset in range(6)
+        for offset in range(state.settings.working_days)
     ]
 
 

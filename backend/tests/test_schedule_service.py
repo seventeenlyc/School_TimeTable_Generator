@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from domain import LessonCell
 from factories import (
     make_state_with_substitution_exception,
@@ -16,10 +18,10 @@ from schedule_service import (
 )
 
 
-def test_school_dates_skip_sunday_only():
+def test_school_dates_skip_weekends():
     dates = list(iter_school_dates(date(2026, 8, 21), date(2026, 8, 24)))
 
-    assert dates == [date(2026, 8, 21), date(2026, 8, 22), date(2026, 8, 24)]
+    assert dates == [date(2026, 8, 21), date(2026, 8, 24)]
     assert monday_of(date(2026, 8, 23)) == date(2026, 8, 17)
 
 
@@ -34,7 +36,6 @@ def test_latest_effective_version_wins():
         date(2026, 9, 9),
         date(2026, 9, 10),
         date(2026, 9, 11),
-        date(2026, 9, 12),
     ]
 
 
@@ -51,10 +52,11 @@ def test_date_exception_replaces_teacher_without_mutating_version():
     assert assignment.target_id == "req-class1-math"
 
 
-def test_sunday_resolves_to_an_empty_school_day():
+@pytest.mark.parametrize("weekend", [date(2026, 9, 5), date(2026, 9, 6)])
+def test_weekend_resolves_to_an_empty_school_day(weekend):
     state, _ = make_two_class_state()
 
-    day = resolve_day(state, date(2026, 9, 6))
+    day = resolve_day(state, weekend)
 
     assert day.version_id is None
     assert day.class_schedules == {}

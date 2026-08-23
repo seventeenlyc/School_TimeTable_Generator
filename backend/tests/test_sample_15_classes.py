@@ -65,7 +65,7 @@ def test_demo_catalog_shape_and_combinations():
     # Check split block for class-14 and class-15 with geography in 301 and politics in 302
     split_block = state.split_course_blocks[0]
     assert split_block.source_class_ids == ["class-14", "class-15"]
-    assert split_block.periods_per_week == 6
+    assert split_block.periods_per_week == 5
     assert len(split_block.groups) == 2
 
     geo_group = next(g for g in split_block.groups if g.subject_id == "subject-geography")
@@ -133,7 +133,7 @@ def test_demo_schedule_invariants_and_validation():
     for class_obj in state.classes:
         class_id = class_obj.id
         schedule = version.class_schedules[class_id]
-        assert len(schedule) == 6  # 6 days
+        assert len(schedule) == 5  # 5 days
 
         null_cell_count = 0
         pe_count = 0
@@ -164,22 +164,24 @@ def test_demo_schedule_invariants_and_validation():
                     assert cell.split_block_id == split_block_id
                     academic_subjects_today.append("split-geography-politics")
 
-            # Each class has six academic subjects once per day
-            # For class-14/15, split counts as one of the six daily academic subjects
-            assert len(academic_subjects_today) == 6
+            # Each class has all six academic subjects every weekday. Math has
+            # one extra weekly period, so one day contains a second math lesson.
+            assert len(academic_subjects_today) in {6, 7}
             assert len(set(academic_subjects_today)) == 6
+            if len(academic_subjects_today) == 7:
+                assert academic_subjects_today.count("subject-math") == 2
 
         # PE exactly twice/week
         assert pe_count == 2
         # Fixed Monday period index 7 meeting exactly once
         assert meeting_count == 1
-        # Exactly 9 null cells per week
-        assert null_cell_count == 9
+        # Exactly 6 null cells per five-day week
+        assert null_cell_count == 6
 
     # Split synchronized once/day between class-14 and class-15
     c14_sched = version.class_schedules["class-14"]
     c15_sched = version.class_schedules["class-15"]
-    for day in range(6):
+    for day in range(5):
         c14_split_periods = [
             p
             for p, cell in enumerate(c14_sched[day])

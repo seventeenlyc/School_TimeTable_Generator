@@ -1,0 +1,86 @@
+{
+  "name": "school-timetable-generator",
+  "version": "1.0.3",
+  "description": "智能排课系统 - 基于 CP-SAT 约束规划引擎的学校课程表生成器",
+  "main": "main.js",
+  "author": "School Timetable Team",
+  "license": "CC-BY-NC-4.0",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test main.cache.test.js",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.4.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.school-timetable.generator",
+    "productName": "智能排课系统",
+    "copyright": "Copyright © 2025 School Timetable Team",
+    "directories": {
+      "output": "../release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "智能排课系统",
+      "language": "2052",
+      "include": "installer.nsh",
+      "artifactName": "智能排课系统-Setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "智能排课系统.${ext}"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "icon.ico",
+      "icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "python-embed",
+        "to": "python-embed",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": [
+          "**/*.py",
+          "data/**",
+          "!venv/**",
+          "!__pycache__/**",
+          "!tests/**",
+          "!**/__pycache__/**",
+          "!*.pyc"
+        ]
+      },
+      {
+        "from": "../frontend/dist",
+        "to": "frontend-dist",
+        "filter": ["**/*"]
+      }
+    ],
+    "asar": true
+  }
+}

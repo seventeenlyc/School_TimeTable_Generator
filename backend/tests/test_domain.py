@@ -34,9 +34,9 @@ def test_lesson_cell_accepts_exactly_one_reference():
     assert cell.requirement_id is None
 
 
-def test_settings_are_fixed_to_monday_through_saturday():
+def test_settings_are_fixed_to_monday_through_friday():
     settings = Settings(periods_per_day=8)
-    assert settings.working_days == 6
+    assert settings.working_days == 5
     assert settings.long_absence_days == 28
     assert settings.dict(by_alias=True)["longAbsenceDays"] == 28
 

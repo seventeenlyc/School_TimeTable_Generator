@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import {
   formatImportError,
@@ -24,7 +25,45 @@ async function workbookWithSheets(sheets) {
   return workbook.xlsx.writeBuffer();
 }
 
+async function workbookWithPrefixedSpreadsheetNamespace(headers, rows, sheetName = "Sheet1") {
+  const buffer = await workbookBuffer(headers, rows, sheetName);
+  const zip = await JSZip.loadAsync(buffer);
+  const spreadsheetNamespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+
+  await Promise.all(Object.values(zip.files).map(async (entry) => {
+    if (entry.dir || !entry.name.endsWith(".xml")) return;
+    const xml = await entry.async("string");
+    if (!xml.includes(`xmlns="${spreadsheetNamespace}"`)) return;
+    const prefixed = xml
+      .replace(`xmlns="${spreadsheetNamespace}"`, `xmlns:x="${spreadsheetNamespace}"`)
+      .replace(/<(\/?)([A-Za-z_][\w.-]*)(?=[\s/>])/g, "<$1x:$2");
+    zip.file(entry.name, prefixed);
+  }));
+
+  return zip.generateAsync({ type: "arraybuffer" });
+}
+
 describe("parseTeacherWorkbook", () => {
+  it("parses SpreadsheetML files whose main namespace uses an x prefix", async () => {
+    const buffer = await workbookWithPrefixedSpreadsheetNamespace(
+      ["教师姓名", "班主任班级", "主教学科"],
+      [["语文教师01", "1班", "语文"]],
+      "教师",
+    );
+
+    const result = await parseTeacherWorkbook(buffer, "教师.xlsx");
+
+    expect(result.errors).toEqual([]);
+    expect(result.sheetName).toBe("教师");
+    expect(result.rows).toEqual([
+      expect.objectContaining({
+        name: "语文教师01",
+        homeroomClassName: "1班",
+        mainSubjectName: "语文",
+      }),
+    ]);
+  });
+
   it("parses teacher rows and ignores blank rows", async () => {
     const buffer = await workbookBuffer(
       ["教师姓名", "班主任班级", "主教学科"],

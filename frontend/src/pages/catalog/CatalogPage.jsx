@@ -27,7 +27,6 @@ const WEEKDAYS = [
   { id: 2, label: "周三" },
   { id: 3, label: "周四" },
   { id: 4, label: "周五" },
-  { id: 5, label: "周六" },
 ];
 
 export default function CatalogPage() {
@@ -35,7 +34,7 @@ export default function CatalogPage() {
   const [state, setState] = useState(null);
   const [form, setForm] = useState({
     settings: {
-      working_days: 6,
+      working_days: 5,
       periods_per_day: 8,
       long_absence_days: 28,
       max_daily_subject_periods: 2,
@@ -108,7 +107,7 @@ export default function CatalogPage() {
         base_revision: state?.revision || 0,
         settings: {
           ...form.settings,
-          working_days: 6,
+          working_days: 5,
           periods_per_day: Number(form.settings.periods_per_day) || 8,
           long_absence_days: Number(form.settings.long_absence_days) || 28,
           max_daily_subject_periods: Number(form.settings.max_daily_subject_periods) || 2,
@@ -879,7 +878,7 @@ export default function CatalogPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            const workingDays = Number(form.settings?.working_days) || 6;
+                            const workingDays = Number(form.settings?.working_days) || 5;
                             const periodsPerDay = Number(form.settings?.periods_per_day) || 8;
                             const currentSlots = Array.isArray(req.fixed_slots) ? req.fixed_slots : [];
 
@@ -931,7 +930,7 @@ export default function CatalogPage() {
                                   }}
                                   className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white"
                                 >
-                                  {Array.from({ length: Number(form.settings?.working_days) || 6 }, (_, dayIdx) => (
+                                  {Array.from({ length: Number(form.settings?.working_days) || 5 }, (_, dayIdx) => (
                                     <option key={dayIdx} value={dayIdx}>
                                       {["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][dayIdx]}
                                     </option>
@@ -1071,7 +1070,7 @@ export default function CatalogPage() {
                   每周工作天数
                 </label>
                 <div className="px-3 py-2 bg-slate-800/40 border border-slate-700/60 rounded-lg text-sm text-emerald-400 font-medium">
-                  周一至周六（6 天）
+                  周一至周五（5 天）
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1">固定工作制，不支持修改</p>
               </div>

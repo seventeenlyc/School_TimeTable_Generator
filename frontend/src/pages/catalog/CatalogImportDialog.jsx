@@ -129,10 +129,19 @@ export default function CatalogImportDialog({ form, open, applyDisabled = false,
     appliedRef.current = false;
 
     try {
-      const [teacherResult, requirementResult] = await Promise.all([
-        parseSelectedFile(teacherFile, "teacher", parseTeacherWorkbook),
-        parseSelectedFile(requirementFile, "requirement", parseRequirementWorkbook),
-      ]);
+      // ExcelJS 4.x can fail intermittently when two workbook parsers run at
+      // the same time in Electron (the workbook model may be read before its
+      // sheet metadata is ready). Keep the two small imports deterministic.
+      const teacherResult = await parseSelectedFile(
+        teacherFile,
+        "teacher",
+        parseTeacherWorkbook,
+      );
+      const requirementResult = await parseSelectedFile(
+        requirementFile,
+        "requirement",
+        parseRequirementWorkbook,
+      );
       const parsed = {
         teacherRows: Array.isArray(teacherResult?.rows) ? teacherResult.rows : [],
         requirementRows: Array.isArray(requirementResult?.rows) ? requirementResult.rows : [],

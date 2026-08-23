@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import { buildScheduleIndexes } from "./schedule.js";
 
-const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六"];
+const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五"];
 const INVALID_SHEET_CHARS = /[\\/*?:[\]]/g;
 const INVALID_FILENAME_CHARS = /[<>:"/\\|?*]/g;
 const BORDER_COLOR = "FFCBD5E1";
@@ -123,7 +123,7 @@ function applyBorder(cell) {
 }
 
 function populateClassSheet(worksheet, state, version, schoolClass, indexes) {
-  const workingDays = Math.min(Number(state.settings?.working_days) || 6, WEEKDAYS.length);
+  const workingDays = Math.min(Number(state.settings?.working_days) || 5, WEEKDAYS.length);
   const periodsPerDay = Number(state.settings?.periods_per_day) || 8;
   const lastColumn = 1 + workingDays;
   const schedule = version.class_schedules?.[schoolClass.id] || [];

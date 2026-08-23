@@ -235,7 +235,7 @@ export default function TimetablePage() {
         const rawTeacherGrid = version.teacher_schedules?.[selectedTeacherId];
         const defaultPeriods = state.settings?.periods_per_day || 8;
         const periodsCount = rawTeacherGrid?.[0]?.length || defaultPeriods;
-        const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六"];
+        const weekdays = ["周一", "周二", "周三", "周四", "周五"];
 
         return (
           <div className="overflow-x-auto rounded-xl border border-slate-700/60 bg-slate-900/60 shadow-xl backdrop-blur-md">
@@ -256,7 +256,7 @@ export default function TimetablePage() {
                     <td className="py-3 px-4 text-center font-mono font-medium text-slate-400 bg-slate-800/40">
                       第 {periodIdx + 1} 节
                     </td>
-                    {Array.from({ length: 6 }).map((_, dayIdx) => {
+                    {weekdays.map((_, dayIdx) => {
                       const assignment = rawTeacherGrid?.[dayIdx]?.[periodIdx];
                       if (!assignment) {
                         return (

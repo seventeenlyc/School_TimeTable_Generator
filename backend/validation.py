@@ -651,6 +651,12 @@ def validate_timetable_version(
     _validate_fixed_slots(report, state, requirement_slots)
     _validate_daily_subject_limits(report, state, daily_subject_counts)
     _validate_split_daily_subject_limits(report, state, split_references)
+    _validate_combined_elective_daily_limits(
+        report,
+        state,
+        daily_subject_counts,
+        split_references,
+    )
     _validate_consecutive_periods(
         report,
         state.course_requirements,
@@ -829,21 +835,86 @@ def _validate_fixed_slots(report, state, requirement_slots) -> None:
 
 
 def _validate_daily_subject_limits(report, state, daily_subject_counts) -> None:
-    limit = state.settings.max_daily_subject_periods
+    daily_required_names = {"语文", "数学", "英语"}
+    single_daily_core_names = {"语文", "英语"}
+    elective_names = {"物理", "化学", "生物", "历史", "政治", "地理"}
+    subject_names = {subject.id: subject.name for subject in state.subjects}
+    core_names_by_class = defaultdict(set)
+    for requirement in state.course_requirements:
+        subject_name = subject_names.get(requirement.subject_id, "")
+        if subject_name in daily_required_names:
+            core_names_by_class[requirement.class_id].add(subject_name)
+    classes_with_complete_core = {
+        class_id
+        for class_id, names in core_names_by_class.items()
+        if daily_required_names.issubset(names)
+    }
+
+    def is_elective(subject_name: str) -> bool:
+        return any(
+            subject_name == family or subject_name.startswith(f"{family}（")
+            for family in elective_names
+        )
+
     for (class_id, weekday, subject_id), count in daily_subject_counts.items():
+        subject_name = subject_names.get(subject_id, "")
+        limit = (
+            1
+            if subject_name in single_daily_core_names or is_elective(subject_name)
+            else state.settings.max_daily_subject_periods
+        )
         if count > limit:
             _error(
                 report,
-                "daily_subject_limit",
+                (
+                    "elective_daily_subject_limit"
+                    if is_elective(subject_name)
+                    else "daily_subject_limit"
+                ),
                 f"Daily subject count {count} exceeds the limit {limit}",
                 [class_id, subject_id],
                 weekday,
             )
 
+    required_pairs = {
+        (requirement.class_id, requirement.subject_id)
+        for requirement in state.course_requirements
+        if (
+            requirement.class_id in classes_with_complete_core
+            and subject_names.get(requirement.subject_id) in daily_required_names
+        )
+    }
+    for class_id, subject_id in required_pairs:
+        for weekday in range(state.settings.working_days):
+            if daily_subject_counts[(class_id, weekday, subject_id)] < 1:
+                _error(
+                    report,
+                    "daily_required_subject_missing",
+                    "A required core subject is missing from this weekday",
+                    [class_id, subject_id],
+                    weekday,
+                )
+
 
 def _validate_split_daily_subject_limits(report, state, split_references) -> None:
-    limit = state.settings.max_daily_subject_periods
+    elective_names = {"物理", "化学", "生物", "历史", "政治", "地理"}
+    subject_names = {subject.id: subject.name for subject in state.subjects}
+
+    def is_elective(subject_name: str) -> bool:
+        return any(
+            subject_name == family or subject_name.startswith(f"{family}（")
+            for family in elective_names
+        )
+
     for block in state.split_course_blocks:
+        limit = (
+            1
+            if any(
+                is_elective(subject_names.get(group.subject_id, ""))
+                for group in block.groups
+            )
+            else state.settings.max_daily_subject_periods
+        )
         by_class = split_references.get(block.id, {})
         slots = set().union(*by_class.values()) if by_class else set()
         slots_by_day = defaultdict(int)
@@ -858,6 +929,54 @@ def _validate_split_daily_subject_limits(report, state, split_references) -> Non
                     [block.id],
                     weekday,
                 )
+
+
+def _validate_combined_elective_daily_limits(
+    report,
+    state,
+    daily_subject_counts,
+    split_references,
+) -> None:
+    elective_names = {"物理", "化学", "生物", "历史", "政治", "地理"}
+    subject_names = {subject.id: subject.name for subject in state.subjects}
+
+    def family_for(subject_name: str):
+        return next(
+            (
+                family
+                for family in elective_names
+                if subject_name == family or subject_name.startswith(f"{family}（")
+            ),
+            None,
+        )
+
+    combined_counts = defaultdict(int)
+    for (class_id, weekday, subject_id), count in daily_subject_counts.items():
+        family = family_for(subject_names.get(subject_id, ""))
+        if family is not None:
+            combined_counts[(class_id, weekday, family)] += count
+
+    for block in state.split_course_blocks:
+        families = {
+            family
+            for group in block.groups
+            if (family := family_for(subject_names.get(group.subject_id, "")))
+            is not None
+        }
+        for class_id, slots in split_references.get(block.id, {}).items():
+            for weekday, _period in slots:
+                for family in families:
+                    combined_counts[(class_id, weekday, family)] += 1
+
+    for (class_id, weekday, family), count in combined_counts.items():
+        if count > 1:
+            _error(
+                report,
+                "elective_daily_subject_limit",
+                f"Daily elective subject count {count} exceeds the limit 1",
+                [class_id, family],
+                weekday,
+            )
 
 
 def _validate_consecutive_periods(

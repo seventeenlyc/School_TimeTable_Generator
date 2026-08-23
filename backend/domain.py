@@ -38,7 +38,7 @@ class DateSlot(DomainModel):
 
 
 class Settings(DomainModel):
-    working_days: int = Field(default=6, const=True)
+    working_days: int = Field(default=5, const=True)
     periods_per_day: int = Field(default=8, ge=1, le=20)
     long_absence_days: int = Field(default=28, ge=1)
     max_daily_subject_periods: int = Field(default=2, ge=1)

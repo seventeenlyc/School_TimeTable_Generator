@@ -1,6 +1,17 @@
-import { useEffect, useState } from "react";
+import os
+import sys
+
+content = '''import { useEffect, useState } from "react";
 import {
+  Settings,
+  Users,
   BookOpen,
+  CalendarDays,
+  Code2,
+  CheckCircle2,
+  ChevronDown,
+  Layers,
+  Database,
   FileSpreadsheet,
   Cpu,
   Zap,
@@ -12,6 +23,8 @@ import {
   ShieldCheck,
   Lightbulb,
   Table,
+  UploadCloud,
+  FileText,
   AlertTriangle,
   HeartHandshake
 } from "lucide-react";
@@ -84,18 +97,18 @@ export default function GuidePage() {
         }}
       >
         <SideRays
+          side="top"
+          count={24}
           speed={0.4}
-          rayColor1="#38bdf8"
-          rayColor2="#0ea5e9"
+          color="#38bdf8"
           spread={1.2}
           intensity={0.6}
-          origin="top-right"
-          opacity={0.6}
+          vertical={false}
         />
       </div>
 
       <div style={{ position: "relative", zIndex: 1, maxWidth: "1280px", margin: "0 auto", padding: "40px 24px 80px" }}>
-
+        
         {/* 页头 Header */}
         <header style={{ textAlign: "center", marginBottom: "48px" }}>
           <div
@@ -136,7 +149,7 @@ export default function GuidePage() {
 
         {/* 主体两栏布局：左侧导航，右侧内容 */}
         <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: "32px", alignItems: "start" }}>
-
+          
           {/* 左侧悬浮导航 */}
           <aside
             style={{
@@ -245,7 +258,7 @@ export default function GuidePage() {
                       <ShieldCheck size={16} /> 100% 离线单机安全
                     </div>
                     <p style={{ fontSize: "13px", color: "#94a3b8", lineHeight: 1.5, margin: 0 }}>
-                      所有教师、班级及课表数据均保存为本机 JSON 数据文件；系统单机离线运行，无需连接外网。
+                      所有教师、班级及课表数据均保存在本地 SQLite 数据库中，无需连接外网，严防学校师生数据泄露。
                     </p>
                   </div>
 
@@ -254,7 +267,7 @@ export default function GuidePage() {
                       <Zap size={16} /> 复杂多维约束求解
                     </div>
                     <p style={{ fontSize: "13px", color: "#94a3b8", lineHeight: 1.5, margin: 0 }}>
-                      自动排课会同时满足课程周课时、固定节次、教师不可用时段，以及班级、教师和教室不冲突等限制；走班课程会同步占用关联班级。
+                      完美支持连堂课、固定时间（如班会/升旗）、教师互斥、跨年级授课、教研无课时段等多重严格限制。
                     </p>
                   </div>
 
@@ -263,7 +276,7 @@ export default function GuidePage() {
                       <Table size={16} /> 现代化交互 & 导出
                     </div>
                     <p style={{ fontSize: "13px", color: "#94a3b8", lineHeight: 1.5, margin: 0 }}>
-                      支持班级课表与教师课表切换；可导出一个包含全部班级工作表的 Excel 文件，并可在保存新版本时进行校验。
+                      支持班级课表/教师课表多视角切换，提供冲突实时高亮、一键 Excel 多表导出与打印优化布局。
                     </p>
                   </div>
                 </div>
@@ -289,7 +302,7 @@ export default function GuidePage() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-
+                  
                   {/* 步骤 1 */}
                   <div style={{ display: "flex", gap: "16px", background: "rgba(255,255,255,0.02)", padding: "16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.05)" }}>
                     <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "rgba(56, 189, 248, 0.2)", color: "#38bdf8", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, flexShrink: 0 }}>
@@ -297,13 +310,13 @@ export default function GuidePage() {
                     </div>
                     <div>
                       <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#f1f5f9", margin: "0 0 6px" }}>
-                        基础配置（固定周一至周五 / 每日节次）
+                        基础配置（周天数 / 每日节次 / 课时划分）
                       </h3>
                       <p style={{ fontSize: "14px", color: "#94a3b8", lineHeight: 1.6, margin: "0 0 8px" }}>
-                        前往 <strong>「基础数据」→「系统设置」</strong>，确认固定的周一至周五工作制，并设置每日节数。系统会按“5 天 × 每日节数”生成可排课的时间槽。
+                        前往 <strong>「基础设置」</strong>，设置每周工作日（默认 5 天），上午节次（如 4 节）、下午节次（如 4 节）及晚自习。系统会自动生成全校的时间槽矩阵（例：5天 × 8节 = 40 课时/周）。
                       </p>
                       <div style={{ display: "inline-block", background: "rgba(56, 189, 248, 0.08)", border: "1px solid rgba(56, 189, 248, 0.2)", borderRadius: "6px", padding: "4px 10px", fontSize: "12px", color: "#7dd3fc" }}>
-                        💡 提示：先完成系统设置，再录入课程要求和固定节次，能减少后续修改。
+                        💡 提示：修改每日总节次会重置课时矩阵，请优先最先配置此项。
                       </div>
                     </div>
                   </div>
@@ -322,10 +335,10 @@ export default function GuidePage() {
                       </p>
                       <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "14px", color: "#94a3b8", lineHeight: 1.6 }}>
                         <li><strong>教师名单</strong>：录入全校任课教师姓名、班主任担任情况及主教学科。</li>
-                        <li><strong>课程要求</strong>：录入每个班级的各科目任课教师、教室、周课时和固定时间规则。</li>
+                        <li><strong>课程要求</strong>：录入每个班级的各科目任课教师、教室、周总课时、连堂要求以及固定时间规则。</li>
                       </ul>
                       <p style={{ fontSize: "13px", color: "#6ee7b7", margin: "8px 0 0" }}>
-                        ⚡ 可在 <strong>「基础数据」</strong> 中手工录入，或点击 <strong>「导入 Excel」→「解析并预览」→「应用到草稿」</strong>，最后点击保存基础数据。
+                        ⚡ 强烈建议使用 <strong>「Excel 批量导入」</strong> 功能（详见下方 Excel 规范）。
                       </p>
                     </div>
                   </div>
@@ -340,7 +353,7 @@ export default function GuidePage() {
                         一键智能排课与冲突检测
                       </h3>
                       <p style={{ fontSize: "14px", color: "#94a3b8", lineHeight: 1.6, margin: 0 }}>
-                        前往 <strong>「生成课表」</strong>，填写课表名称和生效日期后点击 <strong>「生成预览」</strong>。系统会在候选课表中满足固定节次、教师不可用时段、班级/教师/教室互斥等约束；预览确认后点击 <strong>「确认保存」</strong>。
+                        在 <strong>「排课工作台」</strong> 点击 <strong>「开始自动排课」</strong>。系统引擎将先锁定所有硬约束（固定课时、连堂、教师无课时段），随后运用启发式算法和回溯搜索对剩余课时进行全局填充与均衡优化。排课完成后即时展示成功率及冲突日志。
                       </p>
                     </div>
                   </div>
@@ -355,7 +368,7 @@ export default function GuidePage() {
                         人工微调、多视角查看与 Excel 导出
                       </h3>
                       <p style={{ fontSize: "14px", color: "#94a3b8", lineHeight: 1.6, margin: "0 0 8px" }}>
-                        在班级或教师视图查看课表。需要修改时，进入编辑页，先点击起始课节，再点击目标课节即可交换或移动课程；走班课会同步移动。保存时会生成新版本并校验。点击 <strong>「导出全部班级课表」</strong> 可生成一个按班级分工作表的 Excel 文件。
+                        排课生成后可随时在课表看板中进行拖拽交换或点击调整，系统会实时校验教师与教室时间冲突。确认无误后，点击 <strong>「导出 Excel」</strong> 即可生成全校总表、各班分表及各教师个人课表。
                       </p>
                     </div>
                   </div>
@@ -392,7 +405,7 @@ export default function GuidePage() {
                       <strong style={{ fontSize: "16px", color: "#e2e8f0" }}>课程要求.xlsx</strong>
                       <span style={{ fontSize: "13px", color: "#64748b" }}>（班级排课核心需求表）</span>
                     </div>
-                    <span style={{ fontSize: "12px", color: "#94a3b8" }}>首个非空工作表必须包含以下 7 个表头</span>
+                    <span style={{ fontSize: "12px", color: "#94a3b8" }}>表头必须完全一致（支持 7 列）</span>
                   </div>
 
                   <div style={{ overflowX: "auto", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.1)", background: "rgba(0,0,0,0.2)" }}>
@@ -424,7 +437,7 @@ export default function GuidePage() {
                           <td style={{ padding: "10px 14px" }}>小红</td>
                           <td style={{ padding: "10px 14px" }}>1班教室</td>
                           <td style={{ padding: "10px 14px" }}>7</td>
-                          <td style={{ padding: "10px 14px", color: "#94a3b8" }}>0</td>
+                          <td style={{ padding: "10px 14px", color: "#34d399", fontWeight: 600 }}>1 (表示排1次2节连堂)</td>
                           <td style={{ padding: "10px 14px", color: "#94a3b8" }}>/</td>
                         </tr>
                         <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
@@ -452,8 +465,8 @@ export default function GuidePage() {
                   <div style={{ marginTop: "10px", background: "rgba(255,255,255,0.02)", padding: "12px 16px", borderRadius: "8px", fontSize: "13px", color: "#94a3b8", lineHeight: 1.5 }}>
                     <strong style={{ color: "#f1f5f9" }}>字段格式说明：</strong>
                     <ul style={{ margin: "6px 0 0", paddingLeft: "20px" }}>
-                      <li><strong>连堂课时</strong>：这是兼容旧模板的保留列，表头不能删除；当前版本会忽略该列的值，新导入课程均按单节处理。</li>
-                      <li><strong>固定时间（星期*节次）</strong>：格式为 <code>星期*节次</code>（例如 <code>1*8</code> 表示周一第 8 节，<code>5*1</code> 表示周五第 1 节；无固定时间填 <code>/</code> 或留空）。</li>
+                      <li><strong>连堂课时</strong>：填数字（如 <code>1</code> 表示安排 1 次两节连堂，<code>0</code> 或 <code>/</code> 表示不连堂）。</li>
+                      <li><strong>固定时间</strong>：格式为 <code>星期*节次</code>（例如 <code>1*8</code> 表示周一第8节，<code>5*1</code> 表示周五第1节；无固定时间填 <code>/</code> 或留空）。</li>
                     </ul>
                   </div>
                 </div>
@@ -468,7 +481,7 @@ export default function GuidePage() {
                       <strong style={{ fontSize: "16px", color: "#e2e8f0" }}>教师.xlsx</strong>
                       <span style={{ fontSize: "13px", color: "#64748b" }}>（教师档案与班主任映射表）</span>
                     </div>
-                    <span style={{ fontSize: "12px", color: "#94a3b8" }}>首个非空工作表必须包含以下 3 个表头</span>
+                    <span style={{ fontSize: "12px", color: "#94a3b8" }}>表头必须完全一致（支持 3 列）</span>
                   </div>
 
                   <div style={{ overflowX: "auto", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.1)", background: "rgba(0,0,0,0.2)" }}>
@@ -498,8 +511,8 @@ export default function GuidePage() {
                   <div style={{ marginTop: "10px", background: "rgba(255,255,255,0.02)", padding: "12px 16px", borderRadius: "8px", fontSize: "13px", color: "#94a3b8", lineHeight: 1.5 }}>
                     <strong style={{ color: "#f1f5f9" }}>字段格式说明：</strong>
                     <ul style={{ margin: "6px 0 0", paddingLeft: "20px" }}>
-                      <li><strong>班主任班级</strong>：若该教师担任班主任，填写具体班级名称（如 <code>1班</code>）；非班主任请留空。</li>
-                      <li><strong>主教学科</strong>：填写教师的主要任教学科。导入时会将该学科加入教师资质；课程要求中的任课教师也会自动获得对应学科资质。</li>
+                      <li><strong>班主任班级</strong>：若该教师担任班主任，填写具体班级名称（如 <code>1班</code>）；非班主任填 <code>/</code> 或留空。</li>
+                      <li><strong>主教学科</strong>：教师主修或主要负责课程（便于统筹教研时间约束）。</li>
                     </ul>
                   </div>
                 </div>
@@ -526,7 +539,7 @@ export default function GuidePage() {
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-
+                  
                   {/* 硬约束 */}
                   <div style={{ background: "rgba(239, 68, 68, 0.05)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "12px", padding: "18px" }}>
                     <h3 style={{ fontSize: "16px", fontWeight: 700, color: "#f87171", margin: "0 0 10px", display: "flex", alignItems: "center", gap: "8px" }}>
@@ -537,10 +550,7 @@ export default function GuidePage() {
                       <li><strong>教师无冲突</strong>：同一教师在同一节次只能给一个班级上课。</li>
                       <li><strong>教室资源互斥</strong>：专用功能室（如微机室、实验室）在同时间段容量有限。</li>
                       <li><strong>固定节次锁定</strong>：固定时间要求（如周一第8节班会）优先直接落位锁定。</li>
-                      <li><strong>教师不可用时段</strong>：教师在基础数据中设置的禁排时间不会被安排课程。</li>
-                      <li><strong>走班同步</strong>：同一走班课程会在关联班级的同一时间段同步安排。</li>
-                      <li><strong>每日核心课程</strong>：完整录入语文、数学、英语的班级，每个工作日三科都至少安排一节；语文、英语每天各一节，只有数学可在同一天安排两节。</li>
-                      <li><strong>选科均衡</strong>：物理、化学、生物、历史、政治、地理（含走班课程）同一科目每天最多安排一节。</li>
+                      <li><strong>连堂跨半天禁止</strong>：两节连堂不可横跨上午最后一节与下午第一节。</li>
                     </ul>
                   </div>
 
@@ -550,8 +560,10 @@ export default function GuidePage() {
                       <Lightbulb size={18} /> 软约束与优化目标（Soft Goals · 尽量最优化）
                     </h3>
                     <ul style={{ margin: 0, paddingLeft: "18px", fontSize: "13px", color: "#cbd5e1", lineHeight: 1.7 }}>
-                      <li><strong>班级空档</strong>：尽量减少同一班级一天内两节课之间出现的空课节。</li>
-                      <li><strong>班主任首节</strong>：当班主任教授本班主教学科时，尽量安排在每天第一节。</li>
+                      <li><strong>学科周离散度</strong>：主科（语数英）尽量均匀分布于周一至周五，避免一天排多节或连续几天无课。</li>
+                      <li><strong>教师工作量负荷</strong>：单日课时尽量均衡，避免教师单日连续授课超过 4 节。</li>
+                      <li><strong>早下午精力分布</strong>：主修高思维负荷课程优先置于上午，体育/艺术等优先适度置于下午。</li>
+                      <li><strong>教研活动保护</strong>：同教研组教师尽量在教研时段避开排课。</li>
                     </ul>
                   </div>
 
@@ -559,9 +571,9 @@ export default function GuidePage() {
 
                 {/* 求解算法简述 */}
                 <div style={{ marginTop: "20px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "12px", padding: "18px" }}>
-                  <h4 style={{ fontSize: "15px", fontWeight: 600, color: "#f1f5f9", margin: "0 0 8px" }}>核心求解算法：OR-Tools CP-SAT 约束优化</h4>
+                  <h4 style={{ fontSize: "15px", fontWeight: 600, color: "#f1f5f9", margin: "0 0 8px" }}>核心求解算法：CSP 约束满足 + 启发式回溯搜索</h4>
                   <p style={{ fontSize: "13px", color: "#94a3b8", lineHeight: 1.6, margin: 0 }}>
-                    系统使用 Google OR-Tools 的 CP-SAT 求解器，将“课程要求 × 日期 × 节次”建模为布尔决策变量，并把周课时、固定节次、资源互斥、不可用时段等条件写入约束模型。求解器在最多 30 秒内搜索可行方案，并以班级空档和班主任首节等目标进行优化；若无法生成，会返回不可行诊断而不是生成冲突课表。
+                    排课问题本质属于 NP-Hard 的组合优化问题。系统将“班级-科目-教师-课时”抽象为待赋值变量（Variables），将“时间槽-教室”作为取值域（Domain）。求解器先根据<strong>最少剩余值启发式（MRV）</strong>优先安排约束最紧苛的课程（如固定课、连堂课），再结合<strong>前向检验（Forward Checking）</strong>实时剪枝冲突空间，在遇到死锁时执行自适应回溯或局部禁忌搜索交换，实现数秒内完成数十个班级的课表求解。
                   </p>
                 </div>
               </BorderGlow>
@@ -586,7 +598,7 @@ export default function GuidePage() {
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
-
+                  
                   {/* 作者名片卡 */}
                   <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "14px", padding: "20px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "16px" }}>
@@ -600,7 +612,7 @@ export default function GuidePage() {
                     </div>
 
                     <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "13px" }}>
-
+                      
                       {/* 微信 */}
                       <div
                         onClick={() => copyToClipboard("z13435142650", "微信")}
@@ -678,7 +690,7 @@ export default function GuidePage() {
                         项目开源仓库与声明
                       </div>
                       <p style={{ fontSize: "13px", color: "#94a3b8", lineHeight: 1.6, margin: "0 0 12px" }}>
-                        本项目旨在解决中小学校排课复杂、繁琐的问题，提供开箱即用、零数据上云的现代化排课工具。采用 CC BY-NC 4.0（署名—非商业性使用）协议发布：允许在署名、标注修改并附上许可链接的前提下进行非商业性分享与演绎；商业使用须另行获得授权。
+                        本项目旨在解决中小学校排课复杂、繁琐的问题，提供开箱即用、零数据上云的现代化排课工具。采用 MIT 开源协议发布，允许自由修改与商业二次开发。
                       </p>
                     </div>
 
@@ -717,10 +729,16 @@ export default function GuidePage() {
 
         {/* 底部版权 */}
         <footer style={{ marginTop: "64px", textAlign: "center", fontSize: "13px", color: "#64748b", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "24px" }}>
-          <div>© 2025-2026 拾柒 (seventeenlyc) · School TimeTable Generator. Released under CC BY-NC 4.0.</div>
+          <div>© 2025-2026 拾柒 (seventeenlyc) · School TimeTable Generator. Released under the MIT License.</div>
         </footer>
 
       </div>
     </div>
   );
 }
+'''
+
+with open("使用说明-独立副本/GuidePage.jsx", "w", encoding="utf-8") as f:
+    f.write(content)
+
+print("GuidePage.jsx updated successfully!")

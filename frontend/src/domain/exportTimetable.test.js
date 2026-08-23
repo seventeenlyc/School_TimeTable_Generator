@@ -7,7 +7,7 @@ import {
 
 function makeFixture() {
   const state = {
-    settings: { working_days: 6, periods_per_day: 2 },
+    settings: { working_days: 5, periods_per_day: 2 },
     classes: [
       { id: "c1", name: "高一(1)班" },
       { id: "c2", name: "高一(2)班" },
@@ -59,8 +59,8 @@ function makeFixture() {
   };
 
   const emptyDay = () => [null, null];
-  const classOne = Array.from({ length: 6 }, emptyDay);
-  const classTwo = Array.from({ length: 6 }, emptyDay);
+  const classOne = Array.from({ length: 5 }, emptyDay);
+  const classTwo = Array.from({ length: 5 }, emptyDay);
   classOne[0][0] = { kind: "lesson", requirement_id: "req-chinese" };
   classOne[1][0] = { kind: "split", split_block_id: "split-geo-politics" };
   classTwo[1][0] = { kind: "split", split_block_id: "split-geo-politics" };
@@ -97,6 +97,8 @@ describe("class timetable Excel export", () => {
     expect(firstClass.getCell("C4").value).toBe(
       "走班：地理 / 政治\n李老师 / 王老师\n301教室 / 302教室"
     );
+    expect(firstClass.getCell("F3").value).toBe("周五");
+    expect(firstClass.getCell("G3").value).toBeNull();
     expect(firstClass.views[0]).toMatchObject({ state: "frozen", ySplit: 3 });
     expect(firstClass.pageSetup).toMatchObject({
       orientation: "landscape",
