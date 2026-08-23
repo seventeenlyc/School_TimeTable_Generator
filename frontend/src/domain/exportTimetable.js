@@ -67,14 +67,10 @@ function formatClassCell(cell, indexes) {
     }
 
     const subject = indexes.subjectsById.get(requirement.subject_id);
-    const teacherId = cell.override_teacher_id || requirement.teacher_id;
-    const roomId = cell.override_room_id || requirement.room_id;
     const subjectName = subject?.name || requirement.subject_id || "未知科目";
-    const teacherName = indexes.teachersById.get(teacherId)?.name || teacherId || "未知教师";
-    const roomName = roomId ? indexes.roomsById.get(roomId)?.name || roomId : "";
 
     return {
-      text: [subjectName, teacherName, roomName].filter(Boolean).join("\n"),
+      text: subjectName,
       kind: "lesson",
       colorKey: requirement.subject_id || subjectName,
     };
@@ -87,24 +83,12 @@ function formatClassCell(cell, indexes) {
     }
 
     const subjects = [];
-    const teachers = [];
-    const rooms = [];
     for (const group of block.groups || []) {
       subjects.push(indexes.subjectsById.get(group.subject_id)?.name || group.subject_id || "未知科目");
-      teachers.push(indexes.teachersById.get(group.teacher_id)?.name || group.teacher_id || "未知教师");
-      if (group.room_id) {
-        rooms.push(indexes.roomsById.get(group.room_id)?.name || group.room_id);
-      }
     }
 
     return {
-      text: [
-        `走班：${subjects.join(" / ") || "未知课程"}`,
-        teachers.join(" / "),
-        rooms.join(" / "),
-      ]
-        .filter(Boolean)
-        .join("\n"),
+      text: `走班：${subjects.join(" / ") || "未知课程"}`,
       kind: "split",
       colorKey: cell.split_block_id || "split",
     };
@@ -135,14 +119,7 @@ function populateClassSheet(worksheet, state, version, schoolClass, indexes) {
   worksheet.getCell(1, 1).alignment = { horizontal: "center", vertical: "middle" };
   worksheet.getRow(1).height = 32;
 
-  worksheet.mergeCells(2, 1, 2, lastColumn);
-  worksheet.getCell(2, 1).value = `生效日期：${version.effective_from || "未设置"}    版本：${version.id || "-"}`;
-  worksheet.getCell(2, 1).font = { name: "微软雅黑", size: 10, color: { argb: "FF475569" } };
-  worksheet.getCell(2, 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: META_FILL } };
-  worksheet.getCell(2, 1).alignment = { horizontal: "center", vertical: "middle" };
-  worksheet.getRow(2).height = 22;
-
-  const headerRow = worksheet.getRow(3);
+  const headerRow = worksheet.getRow(2);
   headerRow.values = ["节次", ...WEEKDAYS.slice(0, workingDays)];
   headerRow.height = 24;
   for (let column = 1; column <= lastColumn; column += 1) {
@@ -154,7 +131,7 @@ function populateClassSheet(worksheet, state, version, schoolClass, indexes) {
   }
 
   for (let period = 0; period < periodsPerDay; period += 1) {
-    const row = worksheet.getRow(period + 4);
+    const row = worksheet.getRow(period + 3);
     row.height = 54;
     const periodCell = row.getCell(1);
     periodCell.value = `第 ${period + 1} 节`;
@@ -169,7 +146,7 @@ function populateClassSheet(worksheet, state, version, schoolClass, indexes) {
       cell.value = output.text;
       cell.font = {
         name: "微软雅黑",
-        size: output.kind === "split" ? 9 : 10,
+        size: 10,
         bold: output.kind !== "empty",
         color: { argb: output.kind === "empty" ? "FF94A3B8" : "FF0F172A" },
       };
@@ -188,8 +165,8 @@ function populateClassSheet(worksheet, state, version, schoolClass, indexes) {
     worksheet.getColumn(column).width = 23;
   }
 
-  worksheet.views = [{ state: "frozen", xSplit: 1, ySplit: 3, topLeftCell: "B4" }];
-  worksheet.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: lastColumn } };
+  worksheet.views = [{ state: "frozen", xSplit: 1, ySplit: 2, topLeftCell: "B3" }];
+  worksheet.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: lastColumn } };
   worksheet.pageSetup = {
     orientation: "landscape",
     paperSize: 9,
@@ -198,8 +175,8 @@ function populateClassSheet(worksheet, state, version, schoolClass, indexes) {
     fitToHeight: 0,
     horizontalCentered: true,
     margins: { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 },
-    printArea: `A1:${worksheet.getColumn(lastColumn).letter}${periodsPerDay + 3}`,
-    printTitlesRow: "1:3",
+    printArea: `A1:${worksheet.getColumn(lastColumn).letter}${periodsPerDay + 2}`,
+    printTitlesRow: "1:2",
   };
   worksheet.headerFooter.oddFooter = "&L课表调度专家&C第 &P 页，共 &N 页&R&D";
 }

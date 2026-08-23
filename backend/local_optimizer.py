@@ -310,6 +310,20 @@ def _direct_substitution_actions(
     return actions
 
 
+def _source_emptying_is_safe(row: Sequence, period: int) -> bool:
+    """把课从 (day, period) 移走后，该课位变成自习。
+
+    自习不能出现在第一节，也不能与相邻自习连排。
+    """
+    if period == 0:
+        return False
+    if period - 1 >= 0 and row[period - 1] is None:
+        return False
+    if period + 1 < len(row) and row[period + 1] is None:
+        return False
+    return True
+
+
 def _ordinary_move_actions(
     state: AppState,
     event: ChangeEvent,
@@ -325,6 +339,7 @@ def _ordinary_move_actions(
         return []
     source_cell = source_lesson.cell.copy(deep=True)
     source_target = source_lesson.target_ids[0]
+    source_row = source_day.class_schedules[occurrence.class_id]
     monday = monday_of(occurrence.date)
     actions: List[_Action] = []
 
@@ -348,6 +363,11 @@ def _ordinary_move_actions(
             ignored_targets = {source_target}
             if destination_target is not None:
                 ignored_targets.add(destination_target)
+
+            if destination_lesson is None and not _source_emptying_is_safe(
+                source_row, occurrence.period
+            ):
+                continue
 
             if event.kind == ChangeEventKind.ABSENCE:
                 replacement_ids = _qualified_teacher_ids(state, occurrence)
@@ -487,6 +507,20 @@ def _split_move_actions(
     affected_group = block.groups[occurrence.group_index]
     group_target_ids = {group.id for group in block.groups}
     monday = monday_of(occurrence.date)
+    try:
+        source_day = resolve_day(state, occurrence.date)
+    except NoActiveTimetable:
+        return []
+    source_rows = {
+        class_id: source_day.class_schedules[class_id]
+        for class_id in block.source_class_ids
+    }
+    if occurrence.period == 0:
+        return []
+    for class_id in block.source_class_ids:
+        row = source_rows[class_id]
+        if not _source_emptying_is_safe(row, occurrence.period):
+            return []
     actions: List[_Action] = []
     for day_offset in range(state.settings.working_days):
         destination_date = monday + timedelta(days=day_offset)

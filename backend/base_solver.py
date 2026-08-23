@@ -13,6 +13,7 @@ from domain import (
     LessonCell,
     SplitCourseBlock,
     TimetableVersion,
+    is_system_placeholder_class,
 )
 from validation import assert_valid_version, rebuild_resource_indexes
 
@@ -119,6 +120,8 @@ def generate_base_timetable(
     class_variables = _class_slot_variables(state, normal, split)
     for variables in class_variables.values():
         model.Add(sum(variables) <= 1)
+
+    _add_self_study_constraints(model, state, class_variables)
 
     teacher_variables = _teacher_slot_variables(state, normal, split)
     for variables in teacher_variables.values():
@@ -243,6 +246,36 @@ def _class_slot_variables(
                         split[(block.id, day, period)]
                     )
     return variables
+
+
+def _add_self_study_constraints(
+    model: cp_model.CpModel,
+    state: AppState,
+    class_variables: DefaultDict[
+        Tuple[str, int, int], List[cp_model.IntVar]
+    ],
+) -> None:
+    """自习不能出现在第一节，也不能连续两节自习。
+
+    系统占位班（走班虚拟来源班）不参与该约束。
+    """
+    for school_class in state.classes:
+        if is_system_placeholder_class(school_class):
+            continue
+        for day in range(state.settings.working_days):
+            # 第一节必须有课（不允许第一节自习）
+            model.Add(
+                sum(class_variables[(school_class.id, day, 0)]) == 1
+            )
+            # 相邻两节不能同时为空（不允许自习连排）
+            for period in range(state.settings.periods_per_day - 1):
+                model.Add(
+                    sum(class_variables[(school_class.id, day, period)])
+                    + sum(
+                        class_variables[(school_class.id, day, period + 1)]
+                    )
+                    >= 1
+                )
 
 
 def _teacher_slot_variables(
@@ -561,6 +594,27 @@ def _diagnose_infeasibility(
                     class_id,
                     required,
                     total_slots,
+                )
+            )
+
+    # 自习约束容量：第一节必须有课且自习不能连排。
+    # 每天最多可空 periods_per_day // 2 节（第一节除外，空节需间隔排列）。
+    max_empty_per_day = state.settings.periods_per_day // 2
+    minimum_for_self_study_rules = total_slots - (
+        state.settings.working_days * max_empty_per_day
+    )
+    for school_class in state.classes:
+        if is_system_placeholder_class(school_class):
+            continue
+        required = class_load.get(school_class.id, 0)
+        if required < minimum_for_self_study_rules:
+            diagnostics.append(
+                _capacity_diagnostic(
+                    "self_study_capacity",
+                    "Class",
+                    school_class.id,
+                    minimum_for_self_study_rules,
+                    required,
                 )
             )
 

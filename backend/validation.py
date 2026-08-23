@@ -11,6 +11,7 @@ from domain import (
     ResourceAssignment,
     SplitCourseBlock,
     TimetableVersion,
+    is_system_placeholder_class,
 )
 
 
@@ -662,6 +663,7 @@ def validate_timetable_version(
         state.course_requirements,
         requirement_slots,
     )
+    _validate_self_study_placement(report, state, version.class_schedules)
 
     rebuilt = rebuild_resource_indexes(state, version)
     if (
@@ -1012,6 +1014,40 @@ def _validate_consecutive_periods(
                 "Requirement does not occur only in complete adjacent blocks",
                 [requirement.id],
             )
+
+
+def _validate_self_study_placement(report, state, class_schedules) -> None:
+    placeholder_ids = {
+        school_class.id
+        for school_class in state.classes
+        if is_system_placeholder_class(school_class)
+    }
+    for class_id, schedule in class_schedules.items():
+        if class_id in placeholder_ids:
+            continue
+        for weekday, day in enumerate(schedule[: state.settings.working_days]):
+            periods = day[: state.settings.periods_per_day]
+            if not periods:
+                continue
+            if periods[0] is None:
+                _error(
+                    report,
+                    "self_study_first_period",
+                    "Self-study must not occupy the first period of a day",
+                    [class_id],
+                    weekday,
+                    0,
+                )
+            for period in range(len(periods) - 1):
+                if periods[period] is None and periods[period + 1] is None:
+                    _error(
+                        report,
+                        "self_study_consecutive",
+                        "Self-study periods must not be consecutive",
+                        [class_id],
+                        weekday,
+                        period,
+                    )
 
 
 def assert_valid_version(

@@ -3,6 +3,7 @@ from copy import deepcopy
 from fastapi.encoders import jsonable_encoder
 from fastapi.testclient import TestClient
 
+from domain import CourseRequirement, Subject, Teacher
 from factories import make_generation_state, make_two_class_state, place_lesson
 from repository import JsonRepository
 from server import create_app
@@ -19,8 +20,41 @@ CATALOG_FIELDS = (
 )
 
 
+def _add_pe_filler(state):
+    # The API tests keep the default settings (8 periods/day), so the catalog
+    # needs enough lessons to satisfy the self-study placement rules.
+    state.subjects.append(Subject(id="subject-pe", name="体育"))
+    state.teachers.append(
+        Teacher(
+            id="teacher-pe",
+            name="体育老师",
+            qualified_subject_ids=["subject-pe"],
+            teaching_assignment_ids=["req-class1-pe", "req-class2-pe"],
+        )
+    )
+    state.course_requirements.extend(
+        [
+            CourseRequirement(
+                id="req-class1-pe",
+                class_id="class-1",
+                subject_id="subject-pe",
+                teacher_id="teacher-pe",
+                periods_per_week=2,
+            ),
+            CourseRequirement(
+                id="req-class2-pe",
+                class_id="class-2",
+                subject_id="subject-pe",
+                teacher_id="teacher-pe",
+                periods_per_week=2,
+            ),
+        ]
+    )
+
+
 def make_catalog_payload(base_revision):
     state = make_generation_state()
+    _add_pe_filler(state)
     return {
         "base_revision": base_revision,
         **{

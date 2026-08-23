@@ -15,7 +15,7 @@ from domain import (
     Subject,
     Teacher,
 )
-from factories import make_generation_state, make_impossible_room_state, make_two_class_state
+from factories import make_generation_state, make_impossible_room_state
 from validation import validate_timetable_version
 
 
@@ -145,7 +145,7 @@ def test_generator_returns_diagnostics_for_impossible_room_use():
 
 
 def test_generator_respects_fixed_course_requirement_slots():
-    state, _ = make_two_class_state()
+    state = make_generation_state()
     req = next(r for r in state.course_requirements if r.id == "req-class1-math")
     req.fixed_slots = [Slot(weekday=1, period=2)]
     version = generate_base_timetable(state, "2026秋季", date(2026, 9, 1))
@@ -156,14 +156,10 @@ def test_generator_respects_fixed_course_requirement_slots():
 
 
 def test_generator_limits_split_block_daily_frequency():
-    state, _ = make_two_class_state()
+    state = make_generation_state()
     state.settings.max_daily_subject_periods = 1
     split_block = state.split_course_blocks[0]
-    split_block.periods_per_week = 5
-    state.course_requirements = [
-        r for r in state.course_requirements
-        if r.subject_id not in {"subject-geography", "subject-politics"}
-    ]
+    split_block.periods_per_week = 2
     version = generate_base_timetable(state, "2026秋季", date(2026, 9, 1))
     report = validate_timetable_version(state, version)
     assert report.valid, report.errors
@@ -173,6 +169,40 @@ def test_generator_limits_split_block_daily_frequency():
             if cell is not None and cell.split_block_id == split_block.id
         ]
         assert len(day_splits) <= 1
+
+
+def test_generator_never_places_self_study_first_or_consecutively():
+    state = make_generation_state()
+    version = generate_base_timetable(state, "自习约束", date(2026, 9, 1))
+
+    for class_id, days in version.class_schedules.items():
+        for day in days:
+            assert day[0] is not None, f"{class_id} has self-study in period 1"
+            for period in range(len(day) - 1):
+                assert not (
+                    day[period] is None and day[period + 1] is None
+                ), f"{class_id} has consecutive self-study at period {period}"
+
+
+def test_generator_reports_self_study_capacity_diagnostic_when_too_few_lessons():
+    state = make_single_class_subject_state("物理", periods_per_week=2)
+
+    with pytest.raises(GenerationError) as exc:
+        generate_base_timetable(state, "自习容量", date(2026, 9, 1))
+
+    assert "self_study_capacity" in {
+        item.code for item in exc.value.diagnostics
+    }
+
+
+def test_generator_skips_self_study_rules_for_system_placeholder_classes():
+    state = make_single_class_subject_state("物理", periods_per_week=2)
+    state.classes[0].name = "【系统占位】某班走班第二来源"
+
+    version = generate_base_timetable(state, "占位班豁免", date(2026, 9, 1))
+
+    report = validate_timetable_version(state, version)
+    assert report.valid, report.errors
 
 
 def test_generator_rejects_a_core_subject_missing_from_one_weekday():

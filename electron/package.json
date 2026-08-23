@@ -1,6 +1,6 @@
 {
   "name": "school-timetable-generator",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "智能排课系统 - 基于 CP-SAT 约束规划引擎的学校课程表生成器",
   "main": "main.js",
   "author": "School Timetable Team",

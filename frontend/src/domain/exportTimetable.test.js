@@ -91,15 +91,13 @@ describe("class timetable Excel export", () => {
 
     const firstClass = reopened.getWorksheet("高一(1)班");
     expect(firstClass.getCell("A1").value).toBe("15班测试课表 - 高一(1)班");
-    expect(firstClass.getCell("A2").value).toContain("2026-09-01");
-    expect(firstClass.getCell("B4").value).toBe("语文\n张老师\n101教室");
-    expect(firstClass.getCell("B5").value).toBe("自习");
-    expect(firstClass.getCell("C4").value).toBe(
-      "走班：地理 / 政治\n李老师 / 王老师\n301教室 / 302教室"
-    );
-    expect(firstClass.getCell("F3").value).toBe("周五");
-    expect(firstClass.getCell("G3").value).toBeNull();
-    expect(firstClass.views[0]).toMatchObject({ state: "frozen", ySplit: 3 });
+    expect(firstClass.getCell("A2").value).toBe("节次");
+    expect(firstClass.getCell("B3").value).toBe("语文");
+    expect(firstClass.getCell("B4").value).toBe("自习");
+    expect(firstClass.getCell("C3").value).toBe("走班：地理 / 政治");
+    expect(firstClass.getCell("F2").value).toBe("周五");
+    expect(firstClass.getCell("G2").value).toBeNull();
+    expect(firstClass.views[0]).toMatchObject({ state: "frozen", ySplit: 2 });
     expect(firstClass.pageSetup).toMatchObject({
       orientation: "landscape",
       fitToWidth: 1,

@@ -55,6 +55,16 @@ class SchoolClass(DomainModel):
     name: str = Field(min_length=1)
 
 
+def is_system_placeholder_class(school_class: SchoolClass) -> bool:
+    """走班配置生成的虚拟来源班（如“【系统占位】2班走班第二来源”）。
+
+    这类班级不是真实行政班，只承载同步走班块的课时，不参与
+    “自习不在第一节、不连排”的排布约束。
+    """
+    name = school_class.name or ""
+    return name.startswith("【系统占位】") or name.startswith("[系统占位]")
+
+
 class Room(DomainModel):
     id: str = Field(default_factory=new_id)
     name: str = Field(min_length=1)

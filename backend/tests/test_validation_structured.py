@@ -506,3 +506,63 @@ def test_elective_limit_combines_normal_and_split_cells_in_validation():
     report = validate_timetable_version(state, version)
 
     assert "elective_daily_subject_limit" in error_codes(report)
+
+
+def test_self_study_in_first_period_is_reported():
+    state, version = make_two_class_state()
+    place_lesson(version, "class-1", 0, 1, "req-class1-math")
+
+    report = validate_timetable_version(state, version)
+
+    assert "self_study_first_period" in error_codes(report)
+
+
+def test_consecutive_self_study_is_reported():
+    state, version = make_two_class_state()
+    place_lesson(version, "class-1", 0, 0, "req-class1-math")
+    place_lesson(version, "class-1", 0, 3, "req-class1-chinese")
+
+    report = validate_timetable_version(state, version)
+
+    assert "self_study_consecutive" in error_codes(report)
+
+
+def test_placeholder_class_is_exempt_from_self_study_rules():
+    state, version = make_two_class_state()
+    for index, school_class in enumerate(state.classes):
+        school_class.name = f"【系统占位】走班来源{index + 1}"
+    place_lesson(version, "class-1", 0, 1, "req-class1-math")
+
+    report = validate_timetable_version(state, version)
+
+    codes = error_codes(report)
+    assert "self_study_first_period" not in codes
+    assert "self_study_consecutive" not in codes
+
+
+def test_isolated_self_study_is_not_reported_when_other_rules_hold():
+    state, version = make_two_class_state()
+    # Fill every slot except a single isolated non-first period slot
+    # (class-1, weekday 0, period 2). Other rule violations are expected;
+    # only the self-study placement codes must stay absent.
+    class_one_ids = ["req-class1-math", "req-class1-chinese"]
+    class_two_ids = ["req-class2-math-same-teacher", "req-class2-chinese"]
+    block = state.split_course_blocks[0]
+    for weekday in range(state.settings.working_days):
+        for period in range(state.settings.periods_per_day):
+            if weekday == 0 and period == 2:
+                continue
+            if period == 0:
+                place_lesson(version, "class-1", weekday, period, class_one_ids[0])
+                place_lesson(version, "class-2", weekday, period, class_two_ids[0])
+            elif period == 1:
+                place_lesson(version, "class-1", weekday, period, class_one_ids[1])
+                place_lesson(version, "class-2", weekday, period, class_two_ids[1])
+            else:
+                place_split(version, block, weekday, period)
+
+    report = validate_timetable_version(state, version)
+
+    codes = error_codes(report)
+    assert "self_study_first_period" not in codes
+    assert "self_study_consecutive" not in codes

@@ -170,16 +170,164 @@ def place_split(version, block, weekday, period):
 
 
 def make_generation_state():
-    state, _ = make_two_class_state()
-    math_teacher = next(
-        teacher for teacher in state.teachers if teacher.id == "teacher-li"
-    )
-    math_teacher.weekly_unavailable_slots = [Slot(weekday=0, period=0)]
-    state.teachers = [
-        math_teacher,
-        *(teacher for teacher in state.teachers if teacher.id != math_teacher.id),
+    """Dense enough to satisfy first-period and self-study placement rules."""
+    teachers = [
+        Teacher(
+            id="teacher-zhang",
+            name="张老师",
+            qualified_subject_ids=["subject-geography"],
+        ),
+        Teacher(
+            id="teacher-wang",
+            name="王老师",
+            qualified_subject_ids=["subject-politics"],
+        ),
+        Teacher(
+            id="teacher-li",
+            name="李老师",
+            qualified_subject_ids=["subject-math"],
+            teaching_assignment_ids=[
+                "req-class1-math",
+                "req-class2-math-same-teacher",
+            ],
+            weekly_unavailable_slots=[Slot(weekday=0, period=0)],
+        ),
+        Teacher(
+            id="teacher-chen",
+            name="陈老师",
+            qualified_subject_ids=["subject-chinese"],
+            teaching_assignment_ids=[
+                "req-class1-chinese",
+                "req-class2-chinese",
+            ],
+        ),
+        Teacher(
+            id="teacher-xu",
+            name="徐老师",
+            qualified_subject_ids=["subject-english"],
+            teaching_assignment_ids=[
+                "req-class1-english",
+                "req-class2-english",
+            ],
+        ),
+        Teacher(
+            id="teacher-zhao",
+            name="赵老师",
+            qualified_subject_ids=["subject-physics"],
+            teaching_assignment_ids=["req-class1-physics"],
+        ),
+        Teacher(
+            id="teacher-qian",
+            name="钱老师",
+            qualified_subject_ids=["subject-chemistry"],
+            teaching_assignment_ids=["req-class2-chemistry"],
+        ),
     ]
-    state.timetable_versions = []
+    rooms = [
+        Room(id="room-301", name="301教室"),
+        Room(id="room-302", name="302教室"),
+    ]
+    requirements = [
+        CourseRequirement(
+            id="req-class1-math",
+            class_id="class-1",
+            subject_id="subject-math",
+            teacher_id="teacher-li",
+            room_id="room-301",
+            periods_per_week=5,
+        ),
+        CourseRequirement(
+            id="req-class2-math-same-teacher",
+            class_id="class-2",
+            subject_id="subject-math",
+            teacher_id="teacher-li",
+            room_id="room-301",
+            periods_per_week=5,
+        ),
+        CourseRequirement(
+            id="req-class1-chinese",
+            class_id="class-1",
+            subject_id="subject-chinese",
+            teacher_id="teacher-chen",
+            periods_per_week=5,
+        ),
+        CourseRequirement(
+            id="req-class2-chinese",
+            class_id="class-2",
+            subject_id="subject-chinese",
+            teacher_id="teacher-chen",
+            periods_per_week=5,
+        ),
+        CourseRequirement(
+            id="req-class1-english",
+            class_id="class-1",
+            subject_id="subject-english",
+            teacher_id="teacher-xu",
+            periods_per_week=5,
+        ),
+        CourseRequirement(
+            id="req-class2-english",
+            class_id="class-2",
+            subject_id="subject-english",
+            teacher_id="teacher-xu",
+            periods_per_week=5,
+        ),
+        CourseRequirement(
+            id="req-class1-physics",
+            class_id="class-1",
+            subject_id="subject-physics",
+            teacher_id="teacher-zhao",
+            periods_per_week=3,
+        ),
+        CourseRequirement(
+            id="req-class2-chemistry",
+            class_id="class-2",
+            subject_id="subject-chemistry",
+            teacher_id="teacher-qian",
+            periods_per_week=3,
+        ),
+    ]
+    block = SplitCourseBlock(
+        id="split-geography-politics",
+        name="地理/政治走班块",
+        source_class_ids=["class-1", "class-2"],
+        periods_per_week=1,
+        groups=[
+            SplitCourseGroup(
+                id="split-group-geography",
+                subject_id="subject-geography",
+                teacher_id="teacher-zhang",
+                room_id="room-301",
+            ),
+            SplitCourseGroup(
+                id="split-group-politics",
+                subject_id="subject-politics",
+                teacher_id="teacher-wang",
+                room_id="room-302",
+            ),
+        ],
+    )
+    state = AppState(
+        settings=Settings(periods_per_day=PERIODS_PER_DAY),
+        teachers=teachers,
+        classes=[
+            SchoolClass(id="class-1", name="1班"),
+            SchoolClass(id="class-2", name="2班"),
+        ],
+        subjects=[
+            Subject(id="subject-chinese", name="语文"),
+            Subject(id="subject-math", name="数学"),
+            Subject(id="subject-english", name="英语"),
+            Subject(id="subject-physics", name="物理"),
+            Subject(id="subject-chemistry", name="化学"),
+            Subject(id="subject-geography", name="地理"),
+            Subject(id="subject-politics", name="政治"),
+        ],
+        rooms=rooms,
+        course_requirements=requirements,
+        split_course_blocks=[block],
+        timetable_versions=[],
+    )
     return state
 
 
@@ -369,6 +517,23 @@ def make_standard_teachers():
             qualified_subject_ids=["S-PHYS", "S-CHEM"],
             teaching_assignment_ids=["REQ-C1-PHYS", "REQ-C2-CHEM"],
         ),
+        Teacher(
+            id="T-PE-1",
+            name="体育老师1",
+            qualified_subject_ids=["S-PE"],
+            teaching_assignment_ids=["REQ-C1-PE"],
+        ),
+        Teacher(
+            id="T-PE-2",
+            name="体育老师2",
+            qualified_subject_ids=["S-PE"],
+            teaching_assignment_ids=["REQ-C2-PE"],
+        ),
+        Teacher(
+            id="T-MATH-SUB",
+            name="数学备用代课老师",
+            qualified_subject_ids=["S-MATH"],
+        ),
     ]
 
 
@@ -384,6 +549,7 @@ def make_standard_subjects():
         Subject(id="S-MATH", name="数学"),
         Subject(id="S-PHYS", name="物理"),
         Subject(id="S-CHEM", name="化学"),
+        Subject(id="S-PE", name="体育"),
     ]
 
 
@@ -395,7 +561,8 @@ def make_standard_rooms():
 
 
 def make_conflict_free_requirements():
-    # Each class gets 3 subjects × 1 period = 3 per class (fits inside 4 slots)
+    # Each class carries enough lessons to satisfy the self-study placement
+    # rules (no first-period or consecutive self-study) with 4 periods/day.
     return [
         CourseRequirement(
             id="REQ-C1-MATH",
@@ -403,7 +570,8 @@ def make_conflict_free_requirements():
             subject_id="S-MATH",
             teacher_id="T-ZHANG",
             room_id="R-101",
-            periods_per_week=1,
+            periods_per_week=4,
+            fixed_slots=[Slot(weekday=0, period=0)],
         ),
         CourseRequirement(
             id="REQ-C1-PHYS",
@@ -411,7 +579,7 @@ def make_conflict_free_requirements():
             subject_id="S-PHYS",
             teacher_id="T-LI",
             room_id="R-101",
-            periods_per_week=1,
+            periods_per_week=4,
         ),
         CourseRequirement(
             id="REQ-C1-CHEM",
@@ -419,7 +587,14 @@ def make_conflict_free_requirements():
             subject_id="S-CHEM",
             teacher_id="T-WANG",
             room_id="R-101",
-            periods_per_week=1,
+            periods_per_week=3,
+        ),
+        CourseRequirement(
+            id="REQ-C1-PE",
+            class_id="C-1",
+            subject_id="S-PE",
+            teacher_id="T-PE-1",
+            periods_per_week=2,
         ),
         CourseRequirement(
             id="REQ-C2-MATH",
@@ -427,7 +602,7 @@ def make_conflict_free_requirements():
             subject_id="S-MATH",
             teacher_id="T-WANG",
             room_id="R-102",
-            periods_per_week=1,
+            periods_per_week=4,
         ),
         CourseRequirement(
             id="REQ-C2-PHYS",
@@ -435,7 +610,7 @@ def make_conflict_free_requirements():
             subject_id="S-PHYS",
             teacher_id="T-ZHANG",
             room_id="R-102",
-            periods_per_week=1,
+            periods_per_week=3,
         ),
         CourseRequirement(
             id="REQ-C2-CHEM",
@@ -443,6 +618,13 @@ def make_conflict_free_requirements():
             subject_id="S-CHEM",
             teacher_id="T-LI",
             room_id="R-102",
-            periods_per_week=1,
+            periods_per_week=3,
+        ),
+        CourseRequirement(
+            id="REQ-C2-PE",
+            class_id="C-2",
+            subject_id="S-PE",
+            teacher_id="T-PE-2",
+            periods_per_week=2,
         ),
     ]
