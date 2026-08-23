@@ -12,6 +12,61 @@ vi.mock("../../api/client", () => ({
   },
 }));
 
+vi.mock("./CatalogImportDialog", () => ({
+  default: ({ form, open, onApply, onClose }) => {
+    if (!open) return null;
+
+    const importedTeacher = {
+      id: "imported-teacher",
+      name: "导入老师",
+      qualified_subject_ids: ["s2"],
+      teaching_assignment_ids: [],
+      weekly_unavailable_slots: [],
+      homeroom_class_id: null,
+      main_subject_id: "s2",
+    };
+    const importedRequirement = {
+      id: "imported-req",
+      class_id: "c2",
+      subject_id: "s2",
+      teacher_id: "imported-teacher",
+      periods_per_week: 3,
+      room_id: "r2",
+      consecutive_periods: 1,
+      fixed_slots: [],
+    };
+
+    return (
+      <div role="dialog" aria-label="Excel 基础数据导入">
+        <button
+          type="button"
+          onClick={() =>
+            onApply?.({
+              nextForm: {
+                ...form,
+                teachers: [importedTeacher, ...form.teachers],
+                course_requirements: [importedRequirement, ...form.course_requirements],
+              },
+              created: {
+                teachers: [importedTeacher.id],
+                courseRequirements: [importedRequirement.id],
+                classes: [],
+                subjects: [],
+                rooms: [],
+              },
+            })
+          }
+        >
+          应用模拟导入
+        </button>
+        <button type="button" onClick={onClose}>
+          取消导入
+        </button>
+      </div>
+    );
+  },
+}));
+
 describe("CatalogPage", () => {
   const createMockState = () => ({
     revision: 1,
@@ -198,7 +253,7 @@ describe("CatalogPage", () => {
     expect(updatedTeacher.teaching_assignment_ids).toEqual(["req1"]);
   });
 
-  it("supports creating and configuring course requirements with class, subject, teacher, optional room, periods per week and consecutive periods", async () => {
+  it("supports creating and configuring course requirements without a visible consecutive-period editor", async () => {
     render(<CatalogPage />);
 
     await waitFor(() => {
@@ -216,7 +271,8 @@ describe("CatalogPage", () => {
     fireEvent.change(within(firstRequirementCard).getByRole("combobox", { name: /教师/i }), { target: { value: "t2" } });
     fireEvent.change(within(firstRequirementCard).getByRole("combobox", { name: /教室|场地/i }), { target: { value: "r2" } });
     fireEvent.change(within(firstRequirementCard).getByRole("spinbutton", { name: /周课时/i }), { target: { value: "5" } });
-    fireEvent.change(within(firstRequirementCard).getByRole("spinbutton", { name: /连堂|连续节次/i }), { target: { value: "2" } });
+    expect(within(firstRequirementCard).queryByRole("spinbutton", { name: /连堂|连续节次/i }))
+      .not.toBeInTheDocument();
 
     const saveBtn = screen.getByRole("button", { name: /保存基础数据/i });
     fireEvent.click(saveBtn);
@@ -231,12 +287,71 @@ describe("CatalogPage", () => {
               teacher_id: "t2",
               room_id: "r2",
               periods_per_week: 5,
-              consecutive_periods: 2,
+              consecutive_periods: 1,
             }),
           ]),
         })
       );
     });
+  });
+
+  it("applies an imported draft, keeps created entities first, and saves it", async () => {
+    render(<CatalogPage />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /导入 Excel/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /导入 Excel/i }));
+    expect(screen.getByRole("dialog", { name: "Excel 基础数据导入" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "应用模拟导入" }));
+
+    fireEvent.click(screen.getByRole("button", { name: /教师/i }));
+    await waitFor(() => {
+      const teacherCards = screen.getAllByRole("group", { name: /教师/ });
+      expect(teacherCards[0]).toHaveAccessibleName("教师 导入老师");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /课程要求/i }));
+    await waitFor(() => {
+      const requirementCards = screen.getAllByRole("group", { name: /课程要求/ });
+      expect(requirementCards[0]).toHaveAccessibleName("课程要求 1");
+      expect(within(requirementCards[0]).getByRole("combobox", { name: "教师" })).toHaveValue("imported-teacher");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /保存基础数据/i }));
+    await waitFor(() => {
+      expect(api.updateCatalog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          teachers: expect.arrayContaining([
+            expect.objectContaining({ id: "imported-teacher", name: "导入老师" }),
+          ]),
+          course_requirements: expect.arrayContaining([
+            expect.objectContaining({ id: "imported-req", teacher_id: "imported-teacher", consecutive_periods: 1 }),
+          ]),
+        })
+      );
+    });
+  });
+
+  it("does not change the catalog draft when the import dialog is canceled", async () => {
+    render(<CatalogPage />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /导入 Excel/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /导入 Excel/i }));
+    fireEvent.click(screen.getByRole("button", { name: "取消导入" }));
+
+    expect(screen.queryByRole("dialog", { name: "Excel 基础数据导入" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /教师/i }));
+    expect(screen.getAllByRole("group", { name: /教师/ })[0]).toHaveAccessibleName("教师 张老师");
+
+    fireEvent.click(screen.getByRole("button", { name: /保存基础数据/i }));
+    await waitFor(() => expect(api.updateCatalog).toHaveBeenCalled());
+    const savedPayload = api.updateCatalog.mock.calls[0][0];
+    expect(savedPayload.teachers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "imported-teacher" }),
+    ]));
+    expect(savedPayload.course_requirements).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "imported-req" }),
+    ]));
   });
 
   it("inserts a newly created teacher at the beginning and focuses its name", async () => {

@@ -4,6 +4,7 @@ import { catalogFromState, buildCatalogPayload, validateCatalogForm, createId } 
 import SplitCourseBlockEditor from "./SplitCourseBlockEditor";
 import { buildCatalogErrorDetails } from "./catalogErrors";
 import CatalogErrorPanel from "./CatalogErrorPanel";
+import CatalogImportDialog from "./CatalogImportDialog";
 import { useCatalogLocator } from "./useCatalogLocator";
 import AsyncButton from "../../components/AsyncButton";
 import {
@@ -50,6 +51,7 @@ export default function CatalogPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [errors, setErrors] = useState([]);
   const { registerEntity, locateTarget, highlightedEntityId, markNewEntity } = useCatalogLocator(setActiveTab);
 
@@ -125,6 +127,21 @@ export default function CatalogPage() {
     }
   };
 
+  const handleApplyImport = ({ nextForm, created }) => {
+    setForm(nextForm);
+    setErrors([]);
+    setImportOpen(false);
+    const target = [
+      ["teachers", created.teachers?.[0]],
+      ["requirements", created.courseRequirements?.[0]],
+      ["classes", created.classes?.[0]],
+      ["subjects", created.subjects?.[0]],
+      ["rooms", created.rooms?.[0]],
+    ].find(([, id]) => id);
+    if (target) markNewEntity({ tab: target[0], entityId: target[1], field: "name" });
+    toast.success("Excel 数据已应用到草稿，请检查后保存");
+  };
+
   // Helper for adding unavailable slot to a teacher
   const handleAddSlot = (teacherId) => {
     const input = slotInputs[teacherId] || { weekday: 0, period: 0 };
@@ -186,6 +203,13 @@ export default function CatalogPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 font-medium text-slate-200 transition-all"
+          >
+            导入 Excel
+          </button>
           <AsyncButton
             onClick={handleSave}
             disabled={saving}
@@ -836,29 +860,6 @@ export default function CatalogPage() {
                         />
                       </div>
 
-                      {/* Consecutive periods */}
-                      <div>
-                        <label htmlFor={`req-consecutive-${reqId}`} className="block text-[11px] text-slate-400 mb-1">
-                          连堂课时
-                        </label>
-                        <input
-                          id={`req-consecutive-${reqId}`}
-                          aria-label="连堂课时"
-                          type="number"
-                          min="1"
-                          max="10"
-                          value={req.consecutive_periods ?? 1}
-                          onChange={(e) => {
-                            const updated = [...form.course_requirements];
-                            updated[idx] = {
-                              ...updated[idx],
-                              consecutive_periods: parseInt(e.target.value, 10) || 1,
-                            };
-                            setForm({ ...form, course_requirements: updated });
-                          }}
-                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
-                        />
-                      </div>
                     </div>
 
                     {/* Fixed Slots */}
@@ -1172,6 +1173,12 @@ export default function CatalogPage() {
           </div>
         )}
       </div>
+      <CatalogImportDialog
+        form={form}
+        open={importOpen}
+        onApply={handleApplyImport}
+        onClose={() => setImportOpen(false)}
+      />
     </div>
   );
 }
