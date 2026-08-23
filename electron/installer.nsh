@@ -13,8 +13,8 @@
 
 ; 卸载前自定义操作
 !macro customUnInstall
-  ; 清理应用数据（可选）
-  MessageBox MB_YESNO "是否同时删除应用数据（排课数据、配置文件等）？$\n$\n此操作不可恢复。" IDNO skipClean
+  ; 清理应用数据（可选）：默认按钮为“否”，静默升级时也不会误删数据
+  MessageBox MB_YESNO|MB_DEFBUTTON2 "是否同时删除应用数据（排课数据、配置文件等）？$\n$\n此操作不可恢复。" IDNO skipClean
     RMDir /r "$APPDATA\${APP_FILENAME}"
   skipClean:
 !macroend
