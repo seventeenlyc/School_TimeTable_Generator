@@ -12,29 +12,49 @@ vi.mock("../../api/client", () => ({
   },
 }));
 
+let importFixture = null;
+
 vi.mock("./CatalogImportDialog", () => ({
-  default: ({ form, open, onApply, onClose }) => {
+  default: ({ form, open, onApply, onClose, applyDisabled }) => {
     if (!open) return null;
 
-    const importedTeacher = {
-      id: "imported-teacher",
-      name: "导入老师",
-      qualified_subject_ids: ["s2"],
-      teaching_assignment_ids: [],
-      weekly_unavailable_slots: [],
-      homeroom_class_id: null,
-      main_subject_id: "s2",
-    };
-    const importedRequirement = {
-      id: "imported-req",
-      class_id: "c2",
-      subject_id: "s2",
-      teacher_id: "imported-teacher",
-      periods_per_week: 3,
-      room_id: "r2",
-      consecutive_periods: 1,
-      fixed_slots: [],
-    };
+    const fixture = importFixture?.(form) || (() => {
+      const importedTeacher = {
+        id: "imported-teacher",
+        name: "导入老师",
+        qualified_subject_ids: ["s2"],
+        teaching_assignment_ids: [],
+        weekly_unavailable_slots: [],
+        homeroom_class_id: null,
+        main_subject_id: "s2",
+      };
+      const importedRequirement = {
+        id: "imported-req",
+        class_id: "c2",
+        subject_id: "s2",
+        teacher_id: "imported-teacher",
+        periods_per_week: 3,
+        room_id: "r2",
+        consecutive_periods: 1,
+        fixed_slots: [],
+      };
+      return {
+        importedTeacher,
+        importedRequirement,
+        nextForm: {
+          ...form,
+          teachers: [importedTeacher, ...form.teachers],
+          course_requirements: [importedRequirement, ...form.course_requirements],
+        },
+        created: {
+          teachers: [importedTeacher.id],
+          courseRequirements: [importedRequirement.id],
+          classes: [],
+          subjects: [],
+          rooms: [],
+        },
+      };
+    })();
 
     return (
       <div role="dialog" aria-label="Excel 基础数据导入">
@@ -42,20 +62,11 @@ vi.mock("./CatalogImportDialog", () => ({
           type="button"
           onClick={() =>
             onApply?.({
-              nextForm: {
-                ...form,
-                teachers: [importedTeacher, ...form.teachers],
-                course_requirements: [importedRequirement, ...form.course_requirements],
-              },
-              created: {
-                teachers: [importedTeacher.id],
-                courseRequirements: [importedRequirement.id],
-                classes: [],
-                subjects: [],
-                rooms: [],
-              },
+              nextForm: fixture.nextForm,
+              created: fixture.created,
             })
           }
+          disabled={applyDisabled}
         >
           应用模拟导入
         </button>
@@ -125,6 +136,7 @@ describe("CatalogPage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    importFixture = null;
     api.getState.mockResolvedValue(createMockState());
     api.updateCatalog.mockImplementation(async (payload) => ({
       ...createMockState(),
@@ -198,6 +210,77 @@ describe("CatalogPage", () => {
 
     resolveSave(createMockState());
     await waitFor(() => expect(screen.getByRole("button", { name: "保存基础数据" })).toBeInTheDocument());
+  });
+
+  it("blocks opening or applying an import while catalog save is pending", async () => {
+    let resolveSave;
+    api.updateCatalog.mockReturnValueOnce(new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+
+    render(<CatalogPage />);
+    await waitFor(() => expect(screen.getByDisplayValue("高一(1)班")).toBeInTheDocument());
+
+    const importButton = screen.getByRole("button", { name: /导入 Excel/i });
+    fireEvent.click(importButton);
+    expect(screen.getByRole("dialog", { name: "Excel 基础数据导入" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "保存基础数据" }));
+    await screen.findByRole("button", { name: "保存中…" });
+
+    expect(importButton).toBeDisabled();
+    const applyButton = screen.getByRole("button", { name: "应用模拟导入" });
+    expect(applyButton).toBeDisabled();
+    fireEvent.click(applyButton);
+    expect(screen.queryByRole("group", { name: /导入老师/ })).not.toBeInTheDocument();
+
+    resolveSave(createMockState());
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存基础数据" })).toBeInTheDocument());
+  });
+
+  it("switches from another tab to the first newly imported entity in form order", async () => {
+    const firstCreated = {
+      id: "imported-teacher-1",
+      name: "导入老师一",
+      qualified_subject_ids: ["s2"],
+      teaching_assignment_ids: [],
+      weekly_unavailable_slots: [],
+      homeroom_class_id: null,
+      main_subject_id: "s2",
+    };
+    const secondCreated = {
+      id: "imported-teacher-2",
+      name: "导入老师二",
+      qualified_subject_ids: ["s2"],
+      teaching_assignment_ids: [],
+      weekly_unavailable_slots: [],
+      homeroom_class_id: null,
+      main_subject_id: "s2",
+    };
+    importFixture = (currentForm) => ({
+      nextForm: {
+        ...currentForm,
+        teachers: [secondCreated, firstCreated, ...currentForm.teachers],
+      },
+      created: {
+        teachers: [firstCreated.id, secondCreated.id],
+        courseRequirements: [],
+        classes: [],
+        subjects: [],
+        rooms: [],
+      },
+    });
+
+    render(<CatalogPage />);
+    await waitFor(() => expect(screen.getByDisplayValue("高一(1)班")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /科目/i }));
+    fireEvent.click(screen.getByRole("button", { name: /导入 Excel/i }));
+    fireEvent.click(screen.getByRole("button", { name: "应用模拟导入" }));
+
+    const teachersTab = screen.getByRole("button", { name: /^教师 \(/i });
+    await waitFor(() => expect(teachersTab).toHaveClass("bg-slate-800"));
+    const teacherCards = screen.getAllByRole("group", { name: /教师/ });
+    expect(teacherCards[0]).toHaveAccessibleName("教师 导入老师二");
   });
 
   it("allows editing teacher qualified subjects, homeroom class, main subject and weekly unavailable slots without manual teaching assignments", async () => {
@@ -304,7 +387,7 @@ describe("CatalogPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "应用模拟导入" }));
 
-    fireEvent.click(screen.getByRole("button", { name: /教师/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^教师 \(/i }));
     await waitFor(() => {
       const teacherCards = screen.getAllByRole("group", { name: /教师/ });
       expect(teacherCards[0]).toHaveAccessibleName("教师 导入老师");

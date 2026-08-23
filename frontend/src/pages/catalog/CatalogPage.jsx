@@ -128,17 +128,26 @@ export default function CatalogPage() {
   };
 
   const handleApplyImport = ({ nextForm, created }) => {
+    if (saving || savingSettings) return;
     setForm(nextForm);
     setErrors([]);
     setImportOpen(false);
     const target = [
-      ["teachers", created.teachers?.[0]],
-      ["requirements", created.courseRequirements?.[0]],
-      ["classes", created.classes?.[0]],
-      ["subjects", created.subjects?.[0]],
-      ["rooms", created.rooms?.[0]],
-    ].find(([, id]) => id);
-    if (target) markNewEntity({ tab: target[0], entityId: target[1], field: "name" });
+      ["teachers", "teachers", created?.teachers],
+      ["requirements", "course_requirements", created?.courseRequirements],
+      ["classes", "classes", created?.classes],
+      ["subjects", "subjects", created?.subjects],
+      ["rooms", "rooms", created?.rooms],
+    ].map(([tab, collectionKey, createdIds]) => {
+      const ids = new Set(Array.isArray(createdIds) ? createdIds : []);
+      const firstEntity = (Array.isArray(nextForm?.[collectionKey]) ? nextForm[collectionKey] : [])
+        .find((entity) => ids.has(entity?.id));
+      return [tab, firstEntity?.id];
+    }).find(([, id]) => id);
+    if (target) {
+      setActiveTab(target[0]);
+      markNewEntity({ tab: target[0], entityId: target[1], field: "name" });
+    }
     toast.success("Excel 数据已应用到草稿，请检查后保存");
   };
 
@@ -206,6 +215,7 @@ export default function CatalogPage() {
           <button
             type="button"
             onClick={() => setImportOpen(true)}
+            disabled={saving || savingSettings}
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 font-medium text-slate-200 transition-all"
           >
             导入 Excel
@@ -1176,6 +1186,7 @@ export default function CatalogPage() {
       <CatalogImportDialog
         form={form}
         open={importOpen}
+        applyDisabled={saving || savingSettings}
         onApply={handleApplyImport}
         onClose={() => setImportOpen(false)}
       />

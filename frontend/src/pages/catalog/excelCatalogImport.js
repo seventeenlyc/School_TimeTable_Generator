@@ -15,6 +15,28 @@ const FIXED_SLOT = /^(\d+)\s*\*\s*(\d+)$/;
 
 const INVALID_CELL_VALUE_MESSAGE = "单元格类型非法，仅支持文本、数字、富文本或带标量结果的公式";
 
+export function safeImportErrorMessage(error, fallback = "解析失败") {
+  const directMessage = typeof error === "string"
+    ? error
+    : (typeof error?.message === "string" ? error.message : "");
+  if (directMessage.trim()) return directMessage.trim();
+
+  if (error && typeof error === "object") {
+    try {
+      const serialized = JSON.stringify(error);
+      if (serialized && serialized !== "{}") return serialized;
+    } catch {
+      // Fall through to the fixed Chinese fallback for circular objects.
+    }
+  }
+
+  if (error !== null && error !== undefined && typeof error !== "object") {
+    const primitive = String(error).trim();
+    if (primitive && primitive !== "[object Object]") return primitive;
+  }
+  return fallback;
+}
+
 function isScalarCellValue(value) {
   return value === null
     || typeof value === "string"
@@ -215,11 +237,12 @@ function invalidHeaderErrors(fileType, fileName, sheetName, row, invalid) {
   return invalid.map(({ column, value }) => importError(source, `第 ${column} 列`, value, INVALID_CELL_VALUE_MESSAGE));
 }
 
-function rowIsBlank(row, columns) {
-  return columns.every((column) => {
+function rowIsBlank(row) {
+  for (let column = 1; column <= row.cellCount; column += 1) {
     const value = row.getCell(column).value;
-    return !normalizeCellText(value) && !invalidCellValueMessage(value);
-  });
+    if (normalizeCellText(value) || invalidCellValueMessage(value)) return false;
+  }
+  return true;
 }
 
 function normalizeImportCell(value, source, column, errors) {
@@ -261,20 +284,16 @@ function deduplicateRows(rows, keyFor, conflictErrorFor) {
     const signatures = new Map();
     group.forEach((row) => {
       const signature = stableRowKey(row);
-      const first = signatures.get(signature);
-      if (first) {
-        skipped += 1;
-        return;
-      }
-      signatures.set(signature, row);
+      if (!signatures.has(signature)) signatures.set(signature, row);
     });
 
-    if (signatures.size === 1) {
-      uniqueRows.push(signatures.values().next().value);
+    if (signatures.size > 1) {
+      group.forEach((row) => errors.push(conflictErrorFor(row)));
       return;
     }
 
-    signatures.forEach((row) => errors.push(conflictErrorFor(row)));
+    uniqueRows.push(signatures.values().next().value);
+    skipped += group.length - 1;
   });
 
   return { rows: uniqueRows, errors, skipped };
@@ -292,7 +311,7 @@ async function loadWorkbook(arrayBuffer, fileType, fileName) {
         sourceLocation(fileType, fileName, "", null),
         "",
         null,
-        `无法读取工作簿：${normalizeCellText(error?.message || error)}`,
+        `无法读取工作簿：${safeImportErrorMessage(error)}`,
       )],
     };
   }
@@ -326,10 +345,9 @@ export async function parseTeacherWorkbook(arrayBuffer, fileName) {
   const sourceRows = [];
   const parseErrors = [];
   const rowCount = sheet.rowCount || 0;
-  const rowColumns = TEACHER_HEADERS.map((header) => indexes.get(header));
   for (let rowNumber = headerRow.number + 1; rowNumber <= rowCount; rowNumber += 1) {
     const row = sheet.getRow(rowNumber);
-    if (rowIsBlank(row, rowColumns)) continue;
+    if (rowIsBlank(row)) continue;
 
     const source = sourceLocation(fileType, fileName, sheetName, rowNumber);
     const nameValue = row.getCell(indexes.get("教师姓名")).value;
@@ -399,10 +417,9 @@ export async function parseRequirementWorkbook(arrayBuffer, fileName) {
   const sourceRows = [];
   const parseErrors = [];
   const rowCount = sheet.rowCount || 0;
-  const rowColumns = REQUIREMENT_HEADERS.map((header) => indexes.get(header));
   for (let rowNumber = headerRow.number + 1; rowNumber <= rowCount; rowNumber += 1) {
     const row = sheet.getRow(rowNumber);
-    if (rowIsBlank(row, rowColumns)) continue;
+    if (rowIsBlank(row)) continue;
 
     const source = sourceLocation(fileType, fileName, sheetName, rowNumber);
     const classValue = row.getCell(indexes.get("班级")).value;

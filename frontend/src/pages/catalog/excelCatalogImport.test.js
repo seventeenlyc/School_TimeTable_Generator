@@ -44,6 +44,22 @@ describe("parseTeacherWorkbook", () => {
     ]);
   });
 
+  it("validates a row that only has data in an extra worksheet column", async () => {
+    const buffer = await workbookBuffer(
+      ["教师姓名", "班主任班级", "主教学科", "备注"],
+      [[null, null, null, "这不是空行"]],
+    );
+
+    const result = await parseTeacherWorkbook(buffer, "教师.xlsx");
+
+    expect(result.rows).toEqual([]);
+    expect(result.errors.map((error) => error.column)).toEqual([
+      "教师姓名",
+      "主教学科",
+    ]);
+    expect(result.errors.every((error) => error.row === 2)).toBe(true);
+  });
+
   it("blocks Excel error cells instead of importing their object text", async () => {
     const buffer = await workbookBuffer(
       ["教师姓名", "班主任班级", "主教学科"],
@@ -97,11 +113,30 @@ describe("parseTeacherWorkbook", () => {
 
     const result = await parseTeacherWorkbook(buffer, "教师.xlsx");
 
-    expect(result.skipped).toBe(1);
+    expect(result.skipped).toBe(0);
     expect(result.rows).toEqual([]);
-    expect(result.errors).toHaveLength(2);
-    expect(result.errors.map((error) => error.row)).toEqual([2, 4]);
+    expect(result.errors).toHaveLength(3);
+    expect(result.errors.map((error) => error.row)).toEqual([2, 3, 4]);
     expect(result.errors.every((error) => error.column === "教师姓名")).toBe(true);
+  });
+
+  it("reports every row in a conflicting duplicate group without counting duplicates as skipped", async () => {
+    const buffer = await workbookBuffer(
+      ["教师姓名", "班主任班级", "主教学科"],
+      [
+        ["小明", "1班", "语文"],
+        ["小明", "1班", "语文"],
+        ["小明", "2班", "数学"],
+        ["小明", "2班", "数学"],
+      ],
+    );
+
+    const result = await parseTeacherWorkbook(buffer, "教师.xlsx");
+
+    expect(result.rows).toEqual([]);
+    expect(result.skipped).toBe(0);
+    expect(result.errors).toHaveLength(4);
+    expect(result.errors.map((error) => error.row)).toEqual([2, 3, 4, 5]);
   });
 });
 
@@ -182,10 +217,10 @@ describe("parseRequirementWorkbook", () => {
 
     const result = await parseRequirementWorkbook(buffer, "课程要求.xlsx");
 
-    expect(result.skipped).toBe(1);
+    expect(result.skipped).toBe(0);
     expect(result.rows).toEqual([]);
-    expect(result.errors).toHaveLength(2);
-    expect(result.errors.map((error) => error.row)).toEqual([2, 4]);
+    expect(result.errors).toHaveLength(3);
+    expect(result.errors.map((error) => error.row)).toEqual([2, 3, 4]);
     expect(result.errors.every((error) => error.column === "班级")).toBe(true);
   });
 });

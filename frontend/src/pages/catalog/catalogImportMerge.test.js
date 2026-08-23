@@ -187,6 +187,42 @@ describe("planCatalogImport", () => {
     });
   });
 
+  it("counts one updated teacher once when multiple requirements add qualifications", () => {
+    const form = formWithExistingCatalog();
+    const result = planCatalogImport(form, {
+      teacherRows: [],
+      requirementRows: [
+        {
+          className: "1班",
+          subjectName: "数学",
+          teacherName: "张老师",
+          roomName: "101",
+          periodsPerWeek: 2,
+          fixedSlots: [],
+          source: { ...source, row: 2 },
+        },
+        {
+          className: "1班",
+          subjectName: "英语",
+          teacherName: "张老师",
+          roomName: "101",
+          periodsPerWeek: 2,
+          fixedSlots: [],
+          source: { ...source, row: 3 },
+        },
+      ],
+      skipped: 0,
+    }, {
+      createId: (() => {
+        let n = 0;
+        return (prefix) => `${prefix}-new-${++n}`;
+      })(),
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.summary.updated.teachers).toBe(1);
+  });
+
   it("does not delete existing catalog entities and does not mutate the input form", () => {
     const form = formWithExistingCatalog();
     const original = structuredClone(form);
@@ -252,7 +288,7 @@ describe("planCatalogImport", () => {
     });
   });
 
-  it("returns render-safe merge errors and the original form when validation fails", () => {
+  it("preserves the imported row source when final validation fails", () => {
     const form = formWithExistingCatalog();
     const result = planCatalogImport(form, {
       teacherRows: [],
@@ -273,10 +309,15 @@ describe("planCatalogImport", () => {
 
     expect(result.nextForm).toBe(form);
     expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors.every((error) => (
-      error.fileType === "merge"
-      && error.row === null
-      && typeof error.message === "string"
-    ))).toBe(true);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        fileType: "requirement",
+        fileName: "课程要求.xlsx",
+        sheetName: "课程要求",
+        row: 2,
+        column: "固定时间（星期*节次）",
+      }),
+    ]));
+    expect(result.errors.every((error) => typeof error.message === "string")).toBe(true);
   });
 });

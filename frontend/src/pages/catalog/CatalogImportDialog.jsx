@@ -4,10 +4,19 @@ import {
   formatImportError,
   parseRequirementWorkbook,
   parseTeacherWorkbook,
+  safeImportErrorMessage,
 } from "./excelCatalogImport";
 import { planCatalogImport } from "./catalogImportMerge";
 
 const SUMMARY_ITEMS = [
+  ["classes", "班级"],
+  ["subjects", "科目"],
+  ["rooms", "教室"],
+  ["teachers", "教师"],
+  ["courseRequirements", "课程要求"],
+];
+
+const CREATED_NAME_ITEMS = [
   ["classes", "班级"],
   ["subjects", "科目"],
   ["rooms", "教室"],
@@ -27,7 +36,7 @@ function parserException(error, fileType, fileName) {
     row: null,
     column: "",
     value: null,
-    message: error?.message || String(error || "解析失败"),
+    message: safeImportErrorMessage(error),
   };
 }
 
@@ -36,7 +45,21 @@ function countValue(summary, section, key) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
 }
 
-export default function CatalogImportDialog({ form, open, onApply, onClose }) {
+function createdNames(nextForm, created, key) {
+  const createdIds = Array.isArray(created?.[key]) ? created[key] : [];
+  if (!createdIds.length) return [];
+  const collectionKey = key === "courseRequirements" ? "course_requirements" : key;
+  const entities = Array.isArray(nextForm?.[collectionKey]) ? nextForm[collectionKey] : [];
+  const entityById = new Map(entities.map((entity) => [entity?.id, entity]));
+  return createdIds.map((id) => entityById.get(id)).filter(Boolean).map((entity) => {
+    if (key !== "courseRequirements") return entity.name || entity.id;
+    const className = entities.length && nextForm?.classes?.find((item) => item?.id === entity.class_id)?.name;
+    const subjectName = entities.length && nextForm?.subjects?.find((item) => item?.id === entity.subject_id)?.name;
+    return [className || entity.class_id, subjectName || entity.subject_id].filter(Boolean).join(" / ") || entity.id;
+  });
+}
+
+export default function CatalogImportDialog({ form, open, applyDisabled = false, onApply, onClose }) {
   const [teacherFile, setTeacherFile] = useState(null);
   const [requirementFile, setRequirementFile] = useState(null);
   const [parsing, setParsing] = useState(false);
@@ -143,7 +166,7 @@ export default function CatalogImportDialog({ form, open, onApply, onClose }) {
   };
 
   const handleApply = () => {
-    if (appliedRef.current || parsing || !preview || errors.length > 0) return;
+    if (appliedRef.current || applyDisabled || parsing || !preview || errors.length > 0) return;
     appliedRef.current = true;
     setApplied(true);
     onApply?.({ nextForm: preview.nextForm, created: preview.created });
@@ -154,6 +177,11 @@ export default function CatalogImportDialog({ form, open, onApply, onClose }) {
   const summary = preview?.summary;
   const skipped = Number.isFinite(Number(summary?.skipped)) ? Number(summary.skipped) : 0;
   const formattedErrors = errors.map((error) => formatImportError(error));
+  const createdNameItems = CREATED_NAME_ITEMS.map(([key, label]) => ({
+    key,
+    label,
+    names: createdNames(preview?.nextForm, preview?.created, key),
+  }));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4">
@@ -189,7 +217,7 @@ export default function CatalogImportDialog({ form, open, onApply, onClose }) {
               ref={teacherInputRef}
               id="catalog-import-teachers"
               type="file"
-              accept=".xlsx,.xls"
+              accept=".xlsx"
               disabled={parsing}
               onChange={handleFileChange(setTeacherFile)}
               className="block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-300 file:mr-3 file:rounded file:border-0 file:bg-slate-700 file:px-2 file:py-1 file:text-slate-200"
@@ -204,7 +232,7 @@ export default function CatalogImportDialog({ form, open, onApply, onClose }) {
               ref={requirementInputRef}
               id="catalog-import-requirements"
               type="file"
-              accept=".xlsx,.xls"
+              accept=".xlsx"
               disabled={parsing}
               onChange={handleFileChange(setRequirementFile)}
               className="block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-300 file:mr-3 file:rounded file:border-0 file:bg-slate-700 file:px-2 file:py-1 file:text-slate-200"
@@ -246,6 +274,15 @@ export default function CatalogImportDialog({ form, open, onApply, onClose }) {
               ))}
             </div>
             <p className="mt-3 text-xs text-slate-400">跳过重复行 {skipped}</p>
+            <p className="mt-1 text-xs text-rose-300">错误 {errors.length}</p>
+            <div aria-label="新增数据名称" className="mt-4 space-y-1 text-xs text-slate-300">
+              <h4 className="font-medium text-slate-200">新增名称</h4>
+              {createdNameItems.map(({ key, label, names }) => (
+                <p key={key}>
+                  新增{label}名称：{names.length ? names.join("、") : "无"}
+                </p>
+              ))}
+            </div>
           </section>
         )}
 
@@ -265,7 +302,7 @@ export default function CatalogImportDialog({ form, open, onApply, onClose }) {
             <button
               type="button"
               onClick={handleApply}
-              disabled={parsing || errors.length > 0 || applied}
+              disabled={applyDisabled || parsing || errors.length > 0 || applied}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {applied ? "已应用到草稿" : "应用到草稿"}

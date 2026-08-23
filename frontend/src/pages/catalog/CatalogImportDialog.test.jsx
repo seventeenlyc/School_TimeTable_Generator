@@ -9,6 +9,9 @@ vi.mock("./excelCatalogImport", () => ({
   formatImportError: vi.fn((error) => (
     `${error.fileName} → ${error.sheetName} → 第 ${error.row} 行 → ${error.column}：${error.message}`
   )),
+  safeImportErrorMessage: vi.fn((error) => (
+    typeof error?.message === "string" ? error.message : JSON.stringify(error) || "解析失败"
+  )),
   parseRequirementWorkbook: vi.fn(),
   parseTeacherWorkbook: vi.fn(),
 }));
@@ -81,7 +84,9 @@ describe("CatalogImportDialog", () => {
 
     expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
     expect(screen.getByLabelText("教师信息 Excel")).toHaveAttribute("type", "file");
+    expect(screen.getByLabelText("教师信息 Excel")).toHaveAttribute("accept", ".xlsx");
     expect(screen.getByLabelText("课程要求 Excel")).toHaveAttribute("type", "file");
+    expect(screen.getByLabelText("课程要求 Excel")).toHaveAttribute("accept", ".xlsx");
     expect(screen.getByRole("button", { name: "解析并预览" })).toBeDisabled();
   });
 
@@ -215,5 +220,81 @@ describe("CatalogImportDialog", () => {
     expect(await screen.findByText(/教师\.xlsx → 教师名单 → 第 2 行 → 教师姓名：教师姓名不能为空/))
       .toBeInTheDocument();
     expect(screen.getByRole("button", { name: "应用到草稿" })).toBeDisabled();
+  });
+
+  it("renders a safe message when a parser throws a plain object", async () => {
+    parseTeacherWorkbook.mockRejectedValueOnce({ code: "BROKEN" });
+    planCatalogImport.mockImplementationOnce((_, parsed) => ({
+      nextForm: form,
+      summary: emptySummary(),
+      errors: parsed.errors,
+      created: { classes: [], subjects: [], rooms: [], teachers: [], courseRequirements: [] },
+    }));
+
+    render(<CatalogImportDialog form={form} open onApply={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("教师信息 Excel"), {
+      target: { files: [createFile("教师.xlsx")] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "解析并预览" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).not.toContain("[object Object]");
+    expect(alert.textContent).toContain("BROKEN");
+  });
+
+  it("shows preview error count and names for every newly created entity", async () => {
+    const nextForm = {
+      ...form,
+      classes: [{ id: "class-1", name: "1班" }],
+      subjects: [{ id: "subject-1", name: "语文" }],
+      rooms: [{ id: "room-1", name: "101" }],
+      teachers: [{ id: "teacher-1", name: "张老师" }],
+      course_requirements: [{ id: "requirement-1", class_id: "class-1", subject_id: "subject-1" }],
+    };
+    planCatalogImport.mockReturnValueOnce({
+      nextForm,
+      summary: {
+        ...emptySummary(),
+        added: {
+          classes: 1,
+          subjects: 1,
+          rooms: 1,
+          teachers: 1,
+          courseRequirements: 1,
+        },
+      },
+      errors: [{ fileType: "teacher", fileName: "教师.xlsx", sheetName: "Sheet1", row: 2, column: "教师姓名", message: "提示" }],
+      created: {
+        classes: ["class-1"],
+        subjects: ["subject-1"],
+        rooms: ["room-1"],
+        teachers: ["teacher-1"],
+        courseRequirements: ["requirement-1"],
+      },
+    });
+
+    render(<CatalogImportDialog form={form} open onApply={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("教师信息 Excel"), {
+      target: { files: [createFile("教师.xlsx")] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "解析并预览" }));
+
+    const preview = await screen.findByLabelText("导入预览");
+    expect(preview).toHaveTextContent("错误 1");
+    expect(preview).toHaveTextContent("1班");
+    expect(preview).toHaveTextContent("语文");
+    expect(preview).toHaveTextContent("101");
+    expect(preview).toHaveTextContent("张老师");
+    expect(preview).toHaveTextContent("1班 / 语文");
+  });
+
+  it("keeps the apply action disabled while the page is saving", async () => {
+    render(<CatalogImportDialog form={form} open applyDisabled onApply={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("教师信息 Excel"), {
+      target: { files: [createFile("教师.xlsx")] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "解析并预览" }));
+
+    expect(await screen.findByRole("button", { name: "应用到草稿" })).toBeDisabled();
   });
 });

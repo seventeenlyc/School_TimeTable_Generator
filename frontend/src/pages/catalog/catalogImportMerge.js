@@ -92,16 +92,51 @@ function buildNameMap(collection) {
   return map;
 }
 
-function mergeError(message) {
+function mergeError(message, source, column) {
+  const sourceLocation = source && typeof source === "object" ? source : {};
   return {
-    fileType: "merge",
-    fileName: "",
-    sheetName: "",
-    row: null,
-    column: "",
+    fileType: sourceLocation.fileType || "merge",
+    fileName: sourceLocation.fileName || "",
+    sheetName: sourceLocation.sheetName || "",
+    row: sourceLocation.row ?? null,
+    column: column || "",
     value: null,
     message: String(message || "导入后的基础数据校验失败"),
   };
+}
+
+function sourceKey(collectionKey, entityId) {
+  return `${collectionKey}:${entityId}`;
+}
+
+function validationColumn(message) {
+  if (message.includes("固定时间")) return "固定时间（星期*节次）";
+  if (message.includes("周课时")) return "周课时";
+  if (message.includes("连节") || message.includes("连续节次")) return "连堂课时";
+  if (message.includes("班级")) return "班级";
+  if (message.includes("科目")) return "科目";
+  if (message.includes("教师")) return "教师";
+  if (message.includes("教室")) return "教室";
+  return "";
+}
+
+function sourceForValidation(message, nextForm, entitySources) {
+  const requirementMatch = message.match(/^课程要求 #(\d+)/);
+  if (requirementMatch) {
+    const index = Number(requirementMatch[1]) - 1;
+    const requirement = nextForm.course_requirements?.[index];
+    const source = requirement?.id
+      ? entitySources.get(sourceKey("courseRequirements", requirement.id))
+      : null;
+    if (source) return source;
+  }
+
+  const teacherMatch = message.match(/教师 ["“](.+?)["”]/);
+  if (teacherMatch) {
+    const teacher = nextForm.teachers?.find((item) => item?.name === teacherMatch[1]);
+    if (teacher?.id) return entitySources.get(sourceKey("teachers", teacher.id)) || null;
+  }
+  return null;
 }
 
 /**
@@ -125,23 +160,36 @@ export function planCatalogImport(form, parsed, options = {}) {
   const nextForm = cloneCatalogForm(form || {});
   const summary = emptySummary(skipped);
   const created = emptyCreated();
+  const updatedIds = SUMMARY_KEYS.reduce((sets, key) => {
+    sets[key] = new Set();
+    return sets;
+  }, {});
   const maps = {
     classes: buildNameMap(nextForm.classes),
     subjects: buildNameMap(nextForm.subjects),
     rooms: buildNameMap(nextForm.rooms),
     teachers: buildNameMap(nextForm.teachers),
   };
-
-  const markUpdated = (key) => {
-    summary.updated[key] += 1;
+  const entitySources = new Map();
+  const rememberSource = (collectionKey, entityId, source) => {
+    if (entityId && source && typeof source === "object" && !entitySources.has(sourceKey(collectionKey, entityId))) {
+      entitySources.set(sourceKey(collectionKey, entityId), source);
+    }
   };
 
-  const ensureNamedEntity = (collectionKey, prefix, rawName) => {
+  const markUpdated = (key, entityId) => {
+    if (entityId !== null && entityId !== undefined) updatedIds[key].add(entityId);
+  };
+
+  const ensureNamedEntity = (collectionKey, prefix, rawName, source) => {
     const name = normalizedName(rawName);
     if (!name) return null;
 
     const existing = maps[collectionKey].get(name);
-    if (existing) return existing;
+    if (existing) {
+      rememberSource(collectionKey, existing.id, source);
+      return existing;
+    }
 
     const id = makeId(prefix);
     const entity = collectionKey === "teachers"
@@ -160,6 +208,7 @@ export function planCatalogImport(form, parsed, options = {}) {
     maps[collectionKey].set(name, entity);
     summary.added[collectionKey] += 1;
     created[collectionKey].push(id);
+    rememberSource(collectionKey, id, source);
     return entity;
   };
 
@@ -167,11 +216,11 @@ export function planCatalogImport(form, parsed, options = {}) {
   const requirementRows = Array.isArray(parsed?.requirementRows) ? parsed.requirementRows : [];
 
   teacherRows.forEach((row) => {
-    const teacher = ensureNamedEntity("teachers", "teacher", row?.name);
-    const subject = ensureNamedEntity("subjects", "subject", row?.mainSubjectName);
+    const teacher = ensureNamedEntity("teachers", "teacher", row?.name, row?.source);
+    const subject = ensureNamedEntity("subjects", "subject", row?.mainSubjectName, row?.source);
     const homeroomName = normalizedName(row?.homeroomClassName);
     const homeroom = homeroomName
-      ? ensureNamedEntity("classes", "class", homeroomName)
+      ? ensureNamedEntity("classes", "class", homeroomName, row?.source)
       : null;
     if (!teacher || !subject) return;
 
@@ -192,15 +241,15 @@ export function planCatalogImport(form, parsed, options = {}) {
       teacher.main_subject_id = subject.id;
       changed = true;
     }
-    if (changed && !created.teachers.includes(teacher.id)) markUpdated("teachers");
+    if (changed && !created.teachers.includes(teacher.id)) markUpdated("teachers", teacher.id);
   });
 
   requirementRows.forEach((row) => {
-    const classEntity = ensureNamedEntity("classes", "class", row?.className);
-    const subjectEntity = ensureNamedEntity("subjects", "subject", row?.subjectName);
-    const teacherEntity = ensureNamedEntity("teachers", "teacher", row?.teacherName);
+    const classEntity = ensureNamedEntity("classes", "class", row?.className, row?.source);
+    const subjectEntity = ensureNamedEntity("subjects", "subject", row?.subjectName, row?.source);
+    const teacherEntity = ensureNamedEntity("teachers", "teacher", row?.teacherName, row?.source);
     const roomName = normalizedName(row?.roomName);
-    const roomEntity = roomName ? ensureNamedEntity("rooms", "room", roomName) : null;
+    const roomEntity = roomName ? ensureNamedEntity("rooms", "room", roomName, row?.source) : null;
     if (!classEntity || !subjectEntity || !teacherEntity) return;
 
     if (!Array.isArray(teacherEntity.qualified_subject_ids)) {
@@ -208,7 +257,7 @@ export function planCatalogImport(form, parsed, options = {}) {
     }
     if (!teacherEntity.qualified_subject_ids.includes(subjectEntity.id)) {
       teacherEntity.qualified_subject_ids.push(subjectEntity.id);
-      if (!created.teachers.includes(teacherEntity.id)) markUpdated("teachers");
+      if (!created.teachers.includes(teacherEntity.id)) markUpdated("teachers", teacherEntity.id);
     }
 
     const existingIndex = nextForm.course_requirements.findIndex((requirement) => (
@@ -224,12 +273,13 @@ export function planCatalogImport(form, parsed, options = {}) {
 
     if (existingIndex >= 0) {
       const existing = nextForm.course_requirements[existingIndex];
+      rememberSource("courseRequirements", existing.id, row?.source);
       nextForm.course_requirements[existingIndex] = {
         ...existing,
         ...importedValues,
         consecutive_periods: existing.consecutive_periods ?? 1,
       };
-      markUpdated("courseRequirements");
+      markUpdated("courseRequirements", existing.id);
       return;
     }
 
@@ -243,6 +293,11 @@ export function planCatalogImport(form, parsed, options = {}) {
     });
     summary.added.courseRequirements += 1;
     created.courseRequirements.push(id);
+    rememberSource("courseRequirements", id, row?.source);
+  });
+
+  SUMMARY_KEYS.forEach((key) => {
+    summary.updated[key] = updatedIds[key].size;
   });
 
   const validationErrors = validateCatalogForm(nextForm);
@@ -250,7 +305,11 @@ export function planCatalogImport(form, parsed, options = {}) {
     return {
       nextForm: form,
       summary: emptySummary(skipped),
-      errors: validationErrors.map(mergeError),
+      errors: validationErrors.map((message) => mergeError(
+        message,
+        sourceForValidation(message, nextForm, entitySources),
+        validationColumn(message),
+      )),
       created: emptyCreated(),
     };
   }
