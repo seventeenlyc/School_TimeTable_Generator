@@ -44,6 +44,25 @@ describe("parseTeacherWorkbook", () => {
     ]);
   });
 
+  it("blocks Excel error cells instead of importing their object text", async () => {
+    const buffer = await workbookBuffer(
+      ["教师姓名", "班主任班级", "主教学科"],
+      [[{ error: "#N/A" }, "1班", "语文"]],
+    );
+
+    const result = await parseTeacherWorkbook(buffer, "教师.xlsx");
+
+    expect(result.rows).toEqual([]);
+    expect(result.errors).toEqual([
+      expect.objectContaining({
+        row: 2,
+        column: "教师姓名",
+        value: { error: "#N/A" },
+        message: expect.stringContaining("非法"),
+      }),
+    ]);
+  });
+
   it("uses the first non-empty worksheet and reports missing headers", async () => {
     const buffer = await workbookWithSheets([
       { name: "空白页", rows: [] },

@@ -13,6 +13,36 @@ const REQUIREMENT_HEADERS = [
 
 const FIXED_SLOT = /^(\d+)\s*\*\s*(\d+)$/;
 
+const INVALID_CELL_VALUE_MESSAGE = "单元格类型非法，仅支持文本、数字、富文本或带标量结果的公式";
+
+function isScalarCellValue(value) {
+  return value === null
+    || typeof value === "string"
+    || (typeof value === "number" && Number.isFinite(value));
+}
+
+function isRichTextCellValue(value) {
+  return value
+    && typeof value === "object"
+    && Array.isArray(value.richText)
+    && value.richText.every((part) => part && typeof part === "object" && typeof part.text === "string");
+}
+
+function isFormulaCellValue(value) {
+  return value
+    && typeof value === "object"
+    && typeof value.formula === "string"
+    && Object.prototype.hasOwnProperty.call(value, "result")
+    && isScalarCellValue(value.result);
+}
+
+function invalidCellValueMessage(value) {
+  if (value === undefined || isScalarCellValue(value) || isRichTextCellValue(value) || isFormulaCellValue(value)) {
+    return "";
+  }
+  return INVALID_CELL_VALUE_MESSAGE;
+}
+
 /**
  * Convert the cell value shapes produced by ExcelJS into a trimmed string.
  * Formula results and rich text are deliberately handled here so all parser
@@ -21,35 +51,26 @@ const FIXED_SLOT = /^(\d+)\s*\*\s*(\d+)$/;
 export function normalizeCellText(value) {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value.trim();
-  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+  if (typeof value === "number" && Number.isFinite(value)) {
     return String(value).trim();
   }
-  if (value instanceof Date) return value.toISOString().trim();
-  if (Array.isArray(value)) return value.map(normalizeCellText).join("").trim();
-
-  if (typeof value === "object") {
-    if (Array.isArray(value.richText)) {
-      return value.richText.map((part) => normalizeCellText(part?.text ?? part)).join("").trim();
-    }
-    if (Object.prototype.hasOwnProperty.call(value, "result")) {
-      return normalizeCellText(value.result);
-    }
-    if (Object.prototype.hasOwnProperty.call(value, "text")) {
-      return normalizeCellText(value.text);
-    }
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return "";
-    }
-  }
-
-  return String(value).trim();
+  if (isRichTextCellValue(value)) return value.richText.map((part) => part.text).join("").trim();
+  if (isFormulaCellValue(value)) return normalizeCellText(value.result);
+  return "";
 }
 
 function displayCellValue(value) {
   const text = normalizeCellText(value);
-  return text || "";
+  if (text) return text;
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "未知对象";
+    }
+  }
+  return String(value).trim();
 }
 
 function sourceLocation(fileType, fileName, sheetName, row) {
@@ -88,6 +109,13 @@ export function formatImportError(error) {
 }
 
 export function parseFixedSlots(value, source) {
+  const invalidValueMessage = invalidCellValueMessage(value);
+  if (invalidValueMessage) {
+    return {
+      slots: [],
+      errors: [importError(source, "固定时间（星期*节次）", value, invalidValueMessage)],
+    };
+  }
   const text = normalizeCellText(value);
   if (!text || text === "/") return { slots: [], errors: [] };
 
@@ -125,7 +153,8 @@ function worksheetHasValues(sheet) {
   for (let rowNumber = 1; rowNumber <= rowCount; rowNumber += 1) {
     const row = sheet.getRow(rowNumber);
     for (let column = 1; column <= row.cellCount; column += 1) {
-      if (normalizeCellText(row.getCell(column).value)) return true;
+      const value = row.getCell(column).value;
+      if (normalizeCellText(value) || invalidCellValueMessage(value)) return true;
     }
   }
   return false;
@@ -141,7 +170,8 @@ function firstNonEmptyRow(sheet) {
   for (let rowNumber = 1; rowNumber <= rowCount; rowNumber += 1) {
     const row = sheet.getRow(rowNumber);
     for (let column = 1; column <= row.cellCount; column += 1) {
-      if (normalizeCellText(row.getCell(column).value)) return row;
+      const value = row.getCell(column).value;
+      if (normalizeCellText(value) || invalidCellValueMessage(value)) return row;
     }
   }
   return null;
@@ -149,15 +179,21 @@ function firstNonEmptyRow(sheet) {
 
 function headerIndexes(headerRow, requiredHeaders) {
   const indexes = new Map();
+  const invalid = [];
   if (headerRow) {
     for (let column = 1; column <= headerRow.cellCount; column += 1) {
-      const header = normalizeCellText(headerRow.getCell(column).value);
+      const value = headerRow.getCell(column).value;
+      if (invalidCellValueMessage(value)) {
+        invalid.push({ column, value });
+        continue;
+      }
+      const header = normalizeCellText(value);
       if (header && !indexes.has(header)) indexes.set(header, column);
     }
   }
 
   const missing = requiredHeaders.filter((header) => !indexes.has(header));
-  return { indexes, missing };
+  return { indexes, missing, invalid };
 }
 
 function emptyWorkbookError(fileType, fileName, sheetName) {
@@ -174,8 +210,25 @@ function missingHeaderErrors(fileType, fileName, sheetName, row, missing) {
   return missing.map((header) => importError(source, header, null, `缺少必需列：${header}`));
 }
 
+function invalidHeaderErrors(fileType, fileName, sheetName, row, invalid) {
+  const source = sourceLocation(fileType, fileName, sheetName, row?.number || 1);
+  return invalid.map(({ column, value }) => importError(source, `第 ${column} 列`, value, INVALID_CELL_VALUE_MESSAGE));
+}
+
 function rowIsBlank(row, columns) {
-  return columns.every((column) => !normalizeCellText(row.getCell(column).value));
+  return columns.every((column) => {
+    const value = row.getCell(column).value;
+    return !normalizeCellText(value) && !invalidCellValueMessage(value);
+  });
+}
+
+function normalizeImportCell(value, source, column, errors) {
+  const message = invalidCellValueMessage(value);
+  if (message) {
+    errors.push(importError(source, column, value, message));
+    return { text: "", invalid: true };
+  }
+  return { text: normalizeCellText(value), invalid: false };
 }
 
 function positiveInteger(value) {
@@ -257,11 +310,14 @@ export async function parseTeacherWorkbook(arrayBuffer, fileName) {
   }
 
   const headerRow = firstNonEmptyRow(sheet);
-  const { indexes, missing } = headerIndexes(headerRow, TEACHER_HEADERS);
-  if (missing.length) {
+  const { indexes, missing, invalid } = headerIndexes(headerRow, TEACHER_HEADERS);
+  if (missing.length || invalid.length) {
     return {
       rows: [],
-      errors: missingHeaderErrors(fileType, fileName, sheetName, headerRow, missing),
+      errors: [
+        ...invalidHeaderErrors(fileType, fileName, sheetName, headerRow, invalid),
+        ...missingHeaderErrors(fileType, fileName, sheetName, headerRow, missing),
+      ],
       sheetName,
       skipped: 0,
     };
@@ -276,15 +332,21 @@ export async function parseTeacherWorkbook(arrayBuffer, fileName) {
     if (rowIsBlank(row, rowColumns)) continue;
 
     const source = sourceLocation(fileType, fileName, sheetName, rowNumber);
-    const name = normalizeCellText(row.getCell(indexes.get("教师姓名")).value);
-    const homeroomClassName = normalizeCellText(row.getCell(indexes.get("班主任班级")).value);
-    const mainSubjectName = normalizeCellText(row.getCell(indexes.get("主教学科")).value);
-    let hasError = false;
-    if (!name) {
+    const nameValue = row.getCell(indexes.get("教师姓名")).value;
+    const homeroomValue = row.getCell(indexes.get("班主任班级")).value;
+    const mainSubjectValue = row.getCell(indexes.get("主教学科")).value;
+    const nameCell = normalizeImportCell(nameValue, source, "教师姓名", parseErrors);
+    const homeroomCell = normalizeImportCell(homeroomValue, source, "班主任班级", parseErrors);
+    const mainSubjectCell = normalizeImportCell(mainSubjectValue, source, "主教学科", parseErrors);
+    const name = nameCell.text;
+    const homeroomClassName = homeroomCell.text;
+    const mainSubjectName = mainSubjectCell.text;
+    let hasError = nameCell.invalid || homeroomCell.invalid || mainSubjectCell.invalid;
+    if (!nameCell.invalid && !name) {
       parseErrors.push(importError(source, "教师姓名", row.getCell(indexes.get("教师姓名")).value, "教师姓名不能为空"));
       hasError = true;
     }
-    if (!mainSubjectName) {
+    if (!mainSubjectCell.invalid && !mainSubjectName) {
       parseErrors.push(importError(source, "主教学科", row.getCell(indexes.get("主教学科")).value, "主教学科不能为空"));
       hasError = true;
     }
@@ -321,11 +383,14 @@ export async function parseRequirementWorkbook(arrayBuffer, fileName) {
   }
 
   const headerRow = firstNonEmptyRow(sheet);
-  const { indexes, missing } = headerIndexes(headerRow, REQUIREMENT_HEADERS);
-  if (missing.length) {
+  const { indexes, missing, invalid } = headerIndexes(headerRow, REQUIREMENT_HEADERS);
+  if (missing.length || invalid.length) {
     return {
       rows: [],
-      errors: missingHeaderErrors(fileType, fileName, sheetName, headerRow, missing),
+      errors: [
+        ...invalidHeaderErrors(fileType, fileName, sheetName, headerRow, invalid),
+        ...missingHeaderErrors(fileType, fileName, sheetName, headerRow, missing),
+      ],
       sheetName,
       skipped: 0,
     };
@@ -340,29 +405,46 @@ export async function parseRequirementWorkbook(arrayBuffer, fileName) {
     if (rowIsBlank(row, rowColumns)) continue;
 
     const source = sourceLocation(fileType, fileName, sheetName, rowNumber);
-    const className = normalizeCellText(row.getCell(indexes.get("班级")).value);
-    const subjectName = normalizeCellText(row.getCell(indexes.get("科目")).value);
-    const teacherName = normalizeCellText(row.getCell(indexes.get("教师")).value);
-    const roomName = normalizeCellText(row.getCell(indexes.get("教室")).value);
+    const classValue = row.getCell(indexes.get("班级")).value;
+    const subjectValue = row.getCell(indexes.get("科目")).value;
+    const teacherValue = row.getCell(indexes.get("教师")).value;
+    const roomValue = row.getCell(indexes.get("教室")).value;
     const periodsValue = row.getCell(indexes.get("周课时")).value;
-    const periodsPerWeek = positiveInteger(periodsValue);
+    const consecutiveValue = row.getCell(indexes.get("连堂课时")).value;
     const fixedValue = row.getCell(indexes.get("固定时间（星期*节次）")).value;
+    const classCell = normalizeImportCell(classValue, source, "班级", parseErrors);
+    const subjectCell = normalizeImportCell(subjectValue, source, "科目", parseErrors);
+    const teacherCell = normalizeImportCell(teacherValue, source, "教师", parseErrors);
+    const roomCell = normalizeImportCell(roomValue, source, "教室", parseErrors);
+    const periodsCell = normalizeImportCell(periodsValue, source, "周课时", parseErrors);
+    const consecutiveCell = normalizeImportCell(consecutiveValue, source, "连堂课时", parseErrors);
+    const className = classCell.text;
+    const subjectName = subjectCell.text;
+    const teacherName = teacherCell.text;
+    const roomName = roomCell.text;
+    const periodsPerWeek = periodsCell.invalid ? null : positiveInteger(periodsCell.text);
     const fixed = parseFixedSlots(fixedValue, source);
-    let hasError = fixed.errors.length > 0;
+    let hasError = classCell.invalid
+      || subjectCell.invalid
+      || teacherCell.invalid
+      || roomCell.invalid
+      || periodsCell.invalid
+      || consecutiveCell.invalid
+      || fixed.errors.length > 0;
 
-    if (!className) {
+    if (!classCell.invalid && !className) {
       parseErrors.push(importError(source, "班级", row.getCell(indexes.get("班级")).value, "班级不能为空"));
       hasError = true;
     }
-    if (!subjectName) {
+    if (!subjectCell.invalid && !subjectName) {
       parseErrors.push(importError(source, "科目", row.getCell(indexes.get("科目")).value, "科目不能为空"));
       hasError = true;
     }
-    if (!teacherName) {
+    if (!teacherCell.invalid && !teacherName) {
       parseErrors.push(importError(source, "教师", row.getCell(indexes.get("教师")).value, "教师不能为空"));
       hasError = true;
     }
-    if (periodsPerWeek === null) {
+    if (!periodsCell.invalid && periodsPerWeek === null) {
       parseErrors.push(importError(source, "周课时", periodsValue, "周课时必须为正整数"));
       hasError = true;
     }
