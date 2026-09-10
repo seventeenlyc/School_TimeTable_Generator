@@ -1,5 +1,7 @@
 # 本地智能排课与调代课系统 (School Timetable Generator)
 
+语言：中文（当前页面） | [English](README.en.md)
+
 > 本项目源自并基于开源项目 [a6hinandh/School_TimeTable_Generator](https://github.com/a6hinandh/School_TimeTable_Generator) 进行深度重构与功能创作。
 > 遵循 **CC BY-NC 4.0**（知识共享 署名-非商业性使用 4.0 国际）开源协议。
 
